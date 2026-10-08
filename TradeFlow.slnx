@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradeFlow.Api/TradeFlow.Api.csproj" />
+    <Project Path="src/TradeFlow.Application/TradeFlow.Application.csproj" />
+    <Project Path="src/TradeFlow.Domain/TradeFlow.Domain.csproj" />
+    <Project Path="src/TradeFlow.Infrastructure/TradeFlow.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TradeFlow.Api.IntegrationTests/TradeFlow.Api.IntegrationTests.csproj" />
+    <Project Path="tests/TradeFlow.Application.UnitTests/TradeFlow.Application.UnitTests.csproj" />
+    <Project Path="tests/TradeFlow.Domain.UnitTests/TradeFlow.Domain.UnitTests.csproj" />
+    <Project Path="tests/TradeFlow.Infrastructure.IntegrationTests/TradeFlow.Infrastructure.IntegrationTests.csproj" />
+    <Project Path="tests/TradeFlow.ArchitectureTests/TradeFlow.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

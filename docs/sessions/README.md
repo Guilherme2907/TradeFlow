@@ -87,3 +87,6 @@ Every session file should adhere to the following template:
 | Session File | Date | Phase | Primary Topic Covered |
 | :--- | :--- | :--- | :--- |
 | — | — | Phase 0 | *Repository Bootstrap & Harness Creation* |
+| [`2026-10-04-session-slice-1-complete.md`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/sessions/2026-10-04-session-slice-1-complete.md) | 2026-10-04 | Phase 1 | Slice 1 Complete: B2B Order Intake & Clean Monolith Baseline |
+| [`2026-10-06-session-phase-2-modular-monolith-inventory.md`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/sessions/2026-10-06-session-phase-2-modular-monolith-inventory.md) | 2026-10-06 | Phase 2 | Modular Monolith Boundary Enforcement, Architecture Fitness Tests & Inventory Integration |
+| [`2026-10-07-session-modular-infrastructure-and-testcontainer-parity.md`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/sessions/2026-10-07-session-modular-infrastructure-and-testcontainer-parity.md) | 2026-10-07 | Phase 2 | Modular Infrastructure, Dedicated DbContexts, AggregateRoot Timestamps & Testcontainers Parity |

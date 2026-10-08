@@ -41,10 +41,10 @@ This document tracks unresolved, challenging, or recurring architectural and tes
 ### Q03: Boundary Enforcement in a Modular Monolith
 - **Question**: In a Modular Monolith sharing a single physical PostgreSQL database, how do we strictly enforce bounded context boundaries so that Module A cannot query or join tables belonging to Module B? What are the architectural trade-offs between separate schemas, separate connection strings, and automated architectural unit tests (e.g., NetArchTest)?
 - **Topic**: Software Architecture & Domain-Driven Design
-- **Status**: `New`
+- **Status**: `Strong`
 - **Date Introduced**: 2026-09-22
-- **Last Reviewed**: —
-- **Notes**: Critical to avoid the "Distributed Monolith" or "Big Ball of Mud" anti-patterns.
+- **Last Reviewed**: 2026-10-06
+- **Notes**: Mastered in Phase 2 via ADR-0007. Successfully combined PostgreSQL schema isolation (`orders.*` vs `inventory.*`) to stop cross-table joins, explicit public facades (`IInventoryModule`) to prevent aggregate leakage, and automated `NetArchTest` rules to prevent cross-context code references.
 
 ---
 
@@ -93,10 +93,10 @@ This document tracks unresolved, challenging, or recurring architectural and tes
 ### Q08: In-Memory Databases vs. Testcontainers for Integration Tests
 - **Question**: Why do in-memory database providers (like EF Core InMemory or SQLite in-memory) provide false confidence when testing PostgreSQL-backed systems? What specific SQL dialect features, transaction isolation levels, concurrency conflicts, and constraints do in-memory databases fail to replicate, and why is Testcontainers the production standard despite slightly slower boot times?
 - **Topic**: Testing Strategy — Integration Testing & Testcontainers
-- **Status**: `New`
+- **Status**: `Good`
 - **Date Introduced**: 2026-09-22
-- **Last Reviewed**: —
-- **Notes**: Focuses on realistic infrastructure dependencies vs. misleading speed optimizations.
+- **Last Reviewed**: 2026-10-04
+- **Notes**: Empirically validated in Slice 1: EF Core InMemory broke on nullable complex types (`Money?`), and SQLite failed on PostgreSQL-specific `xmin` rowversion concurrency tokens (`NOT NULL constraint failed: orders.Version`). Testcontainers with real PostgreSQL remains the authoritative integration testing standard.
 
 ---
 
@@ -133,7 +133,7 @@ This document tracks unresolved, challenging, or recurring architectural and tes
 ### Q12: Automated Architectural Boundary Enforcement
 - **Question**: How can automated architecture tests (such as NetArchTest) be integrated into a CI/CD pipeline to mathematically guarantee that domain models remain pure (no dependencies on ASP.NET Core, EF Core, or external libraries) and that modules in a Modular Monolith cannot access another module's internal types?
 - **Topic**: Testing Strategy — Architecture Testing
-- **Status**: `New`
+- **Status**: `Strong`
 - **Date Introduced**: 2026-09-22
-- **Last Reviewed**: —
-- **Notes**: Essential pattern for preventing architecture erosion over months and years of development.
+- **Last Reviewed**: 2026-10-06
+- **Notes**: Mastered in Phase 2 via ADR-0006 & ADR-0007. Implemented 14 automated architecture tests in `TradeFlow.ArchitectureTests` covering inward layer dependencies, entity encapsulation (non-public setters, sealed domain events, parameterless constructors), Application design (sealed commands, Anti-Backdoor rule prohibiting MediatR injection), and module isolation (`Orders` vs `Inventory`). Runs in under 150ms in CI.
