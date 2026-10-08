@@ -12,12 +12,12 @@ This document captures the real-time architectural baseline, active modules, tec
 | **Application Status** | Phase 1 Complete; Phase 2 Modular Monolith (`Orders` + `Inventory`) Active |
 | **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Architecture Fitness Functions) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (16), Architecture (14), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (2) — 78 passing tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (14), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (5) — 82 passing tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
 | **Last Updated** | 2026-10-07 |
 
 > [!NOTE]
-> Phase 2 is fully operational. The `Inventory` bounded context has been integrated with schema isolation (`inventory.inventory_items`), aggregate root invariant enforcement (`InventoryItem`), and explicit in-process contract facade (`IInventoryModule`). Architectural fitness functions via `TradeFlow.ArchitectureTests` mathematically enforce Clean Architecture inward dependencies, entity encapsulation, the Anti-Backdoor mediator rule, and bounded context module isolation. All integration tests (both infrastructure and API endpoints) run against real PostgreSQL in Docker via Testcontainers with zero SQLite reliance.
+> Phase 2 is fully operational. The `Inventory` bounded context has been integrated with schema isolation (`inventory.inventory_items`), aggregate root invariant enforcement (`InventoryItem`), and explicit in-process contract facade (`IInventoryModule`). Concurrency contention on hot SKUs is safeguarded via pessimistic row locking (`SELECT *, xmin ... FOR UPDATE`) with deterministic ascending ordering to eliminate deadlocks (ADR-0009). All integration tests run against real PostgreSQL in Docker via Testcontainers with zero SQLite reliance.
 
 ---
 
@@ -30,10 +30,11 @@ This document captures the real-time architectural baseline, active modules, tec
   - In-process module communication strictly through explicit contracts (`IInventoryModule`), prohibiting cross-context internal domain entity references.
   - Automated architecture fitness tests via `NetArchTest.Rules`.
   - Base `AggregateRoot<TId>` encapsulates temporal audit tracking (`CreatedAt`, `UpdatedAt`, `Touch()`) and optimistic concurrency tokens (`Version`).
+  - High-contention inventory allocation utilizes pessimistic row-level locking (`FOR UPDATE`) with deterministic `ProductId` ordering to prevent deadlocks and eliminate OCC retry storms (ADR-0009).
 
 ### 2.2 Active Modules / Bounded Contexts
 - `Orders` (Order aggregate root, OrderLine entity, order state transitions, Minimal APIs).
-- `Inventory` (InventoryItem aggregate root, physical vs. allocated vs. available stock, atomic multi-item stock reservation facade `IInventoryModule`, OCC rowversion concurrency token).
+- `Inventory` (InventoryItem aggregate root, physical vs. allocated vs. available stock, atomic multi-item stock reservation facade `IInventoryModule`, pessimistic row locking with deterministic sorting, OCC rowversion concurrency token).
 - `Catalog` (Product identifier reference `ProductId` in Domain.Common, price snapshots on order lines).
 
 ### 2.3 Active Storage & Persistence
@@ -49,12 +50,12 @@ This document captures the real-time architectural baseline, active modules, tec
 - Docker Desktop installed for Testcontainers PostgreSQL integration tests (`[Trait("Category", "RequiresDocker")]`).
 
 ### 2.6 Active Testing Infrastructure
-- Active (78 automated tests):
+- Active (82 automated tests):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
-  - Unit/Application: NSubstitute, FluentAssertions (16 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation)
+  - Unit/Application: NSubstitute, FluentAssertions (17 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
   - Architecture: NetArchTest.Rules (14 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation)
   - API Contract & E2E: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL (5 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits)
-  - Infrastructure Integration: Testcontainers for PostgreSQL (2 tests: Order persistence and Optimistic Concurrency Control rowversion verification)
+  - Infrastructure Integration: Testcontainers for PostgreSQL (5 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention)
 
 ---
 

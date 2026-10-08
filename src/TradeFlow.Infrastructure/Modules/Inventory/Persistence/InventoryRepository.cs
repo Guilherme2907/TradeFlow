@@ -19,6 +19,31 @@ public class InventoryRepository : IInventoryRepository
             .FirstOrDefaultAsync(x => x.ProductId == productId, cancellationToken);
     }
 
+    public async Task<InventoryItem?> GetByProductIdForUpdateAsync(ProductId productId, CancellationToken cancellationToken = default)
+    {
+        return await _context.InventoryItems
+            .FromSqlInterpolated($"SELECT *, xmin FROM inventory.inventory_items WHERE product_id = {productId.Value} FOR UPDATE")
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<InventoryItem>> GetByProductIdsForUpdateAsync(
+        IReadOnlyCollection<ProductId> productIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (productIds.Count == 0)
+            return [];
+
+        var sortedGuids = productIds
+            .Select(p => p.Value)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToArray();
+
+        return await _context.InventoryItems
+            .FromSqlInterpolated($"SELECT *, xmin FROM inventory.inventory_items WHERE product_id = ANY({sortedGuids}) ORDER BY product_id FOR UPDATE")
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<InventoryItem?> GetBySkuAsync(string sku, CancellationToken cancellationToken = default)
     {
         var normalizedSku = sku.Trim().ToUpperInvariant();

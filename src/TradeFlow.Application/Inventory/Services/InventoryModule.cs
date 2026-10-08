@@ -23,32 +23,49 @@ public class InventoryModule : IInventoryModule
         ReserveStockRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Items.Count == 0)
+            return Result.Success();
+
+        // 1. Aggregate requested quantities per product and sort deterministically to prevent AB-BA deadlocks
+        var groupedRequests = request.Items
+            .GroupBy(i => i.ProductId)
+            .Select(g => (
+                ProductId: new ProductId(g.Key),
+                Sku: g.First().Sku,
+                TotalQuantity: g.Sum(x => x.Quantity)
+            ))
+            .OrderBy(x => x.ProductId.Value)
+            .ToList();
+
+        var productIds = groupedRequests.Select(x => x.ProductId).ToList();
+
+        // 2. Fetch all required inventory aggregates with pessimistic row locks (SELECT FOR UPDATE)
+        var lockedItems = await _inventoryRepository.GetByProductIdsForUpdateAsync(productIds, cancellationToken);
+        var itemMap = lockedItems.ToDictionary(x => x.ProductId);
+
         var itemsToAllocate = new List<(InventoryItem Item, int Quantity)>();
 
-        // Phase 1: Validate stock availability across all requested items
-        foreach (var itemDto in request.Items)
+        // 3. Phase 1: Validate existence and stock availability across all requested items
+        foreach (var req in groupedRequests)
         {
-            var inventoryItem = await _inventoryRepository.GetByProductIdAsync(
-                new ProductId(itemDto.ProductId), cancellationToken);
-
-            if (inventoryItem is null)
+            if (!itemMap.TryGetValue(req.ProductId, out var inventoryItem))
             {
                 return Result.Failure(Error.NotFound(
                     "INVENTORY_ITEM_NOT_FOUND",
-                    $"No inventory tracking found for product '{itemDto.ProductId}' (SKU '{itemDto.Sku}')."));
+                    $"No inventory tracking found for product '{req.ProductId.Value}' (SKU '{req.Sku}')."));
             }
 
-            if (inventoryItem.AvailableQuantity < itemDto.Quantity)
+            if (inventoryItem.AvailableQuantity < req.TotalQuantity)
             {
                 return Result.Failure(Error.Conflict(
                     "INSUFFICIENT_STOCK",
-                    $"Insufficient available stock for SKU '{itemDto.Sku}'. Requested: {itemDto.Quantity}, Available: {inventoryItem.AvailableQuantity}."));
+                    $"Insufficient available stock for SKU '{req.Sku}'. Requested: {req.TotalQuantity}, Available: {inventoryItem.AvailableQuantity}."));
             }
 
-            itemsToAllocate.Add((inventoryItem, itemDto.Quantity));
+            itemsToAllocate.Add((inventoryItem, req.TotalQuantity));
         }
 
-        // Phase 2: Execute domain allocation on each inventory aggregate
+        // 4. Phase 2: Execute domain allocation on each inventory aggregate
         foreach (var (item, quantity) in itemsToAllocate)
         {
             try

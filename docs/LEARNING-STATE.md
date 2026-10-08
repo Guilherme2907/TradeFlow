@@ -48,7 +48,7 @@ This document is the persistent registry of technical competencies, architectura
 | **Apache Kafka Partitioning & Offset Management**| `Not Started` | — | Planned for Phase 4 |
 | **OAuth2 / OpenID Connect Token Lifecycle & SSO** | `Not Started` | — | Planned for Phase 5 |
 | **Distributed Caching, Stampede & Cache-Aside** | `Not Started` | — | Planned for Phase 7 |
-| **Database Concurrency, MVCC & Lock Contention**| `Good` | 2026-10-06 | Applied rowversion / OCC concurrency tokens to `InventoryItem` to safeguard stock allocations against race conditions. |
+| **Database Concurrency, MVCC & Lock Contention**| `Strong` | 2026-10-07 | Independently analyzed OCC retry storm risks, evaluated DDD trade-offs of atomic SQL updates, designed Pessimistic Locking with row-level locks, and enforced deterministic ordering to prevent deadlocks (ADR-0009). Verified with high-concurrency Testcontainers. |
 | **Distributed Tracing & OpenTelemetry** | `Not Started` | — | Planned for Phase 7 |
 | **Kubernetes Core Constructs (Deployments, Ingress)**| `Not Started` | — | Planned for Phase 8 |
 | **Infrastructure as Code with Terraform** | `Not Started` | — | Planned for Phase 8 |
@@ -72,12 +72,12 @@ Testing is a primary engineering axis. Each level is tracked independently to en
 | **9. Performance Testing** | `Not Started` | No (Phase 7) | — | — | — | — |
 | **10. Architecture Testing** | `Strong` | Yes (Phase 2) | — | Multi-project explosion vs single-project modularity | NetArchTest layer rules, entity encapsulation, Anti-Backdoor rule, bounded context isolation | 2026-10-06 |
 
-*Active Testing Baseline (78 passing tests)*:
+*Active Testing Baseline (82 passing tests)*:
 - Unit/Domain: 41 tests (Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
-- Unit/Application: 16 tests (Command handlers, Validation behaviors, InventoryModule atomic reservation)
+- Unit/Application: 17 tests (Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
 - Architecture: 14 tests (Layer dependencies, entity encapsulation, Anti-Backdoor rule, Module boundaries)
 - API Integration: 5 tests (HTTP contracts, RFC 7807 problem details, real PostgreSQL cross-context database commits)
-- Infrastructure Integration: 2 tests (Real PostgreSQL in Docker Testcontainers: Order persistence, OCC rowversion concurrency)
+- Infrastructure Integration: 5 tests (Real PostgreSQL in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention)
 
 ---
 
@@ -95,6 +95,7 @@ Tracks whether architectural and testing choices were defended and explained ind
 | ADR-0006: Automated Architectural Fitness Functions via NetArchTest | Test / Arch | Yes (identified layer dependency rules & entity encapsulation) | Low (Developer independently articulated Clean Architecture constraints & entity immutability) | 2026-10-06 |
 | ADR-0007: Modular Monolith PostgreSQL Schema Isolation & Module Contracts | Arch | Yes (defended schema separation & explicit module contracts over mediator buses) | Low (Developer independently articulated schema boundaries and `IInventoryModule` facade rationale) | 2026-10-06 |
 | ADR-0008: Modular Infrastructure Organization & Dedicated DbContexts | Arch / Persistence | Yes (proposed module-based folder structure and separate DbContexts per bounded context) | Low (Developer independently proposed separate DbContexts and module folders) | 2026-10-07 |
+| ADR-0009: Pessimistic Row Locking and Deterministic Ordering for Inventory Contention | Arch / Concurrency | Yes (independently evaluated OCC retry storms and selected pessimistic row locking with deterministic sorting) | Low (Developer independently articulated failure modes and chosen strategy) | 2026-10-07 |
 
 ---
 
@@ -118,6 +119,7 @@ Logs technical and testing questions asked during sessions to gauge retention, r
 | 2026-10-07 | Dedicated DbContexts & Modular Infrastructure Organization | Arch / Persistence | `Correct` | Proposed dedicated DbContexts (`OrdersDbContext`, `InventoryDbContext`) to eliminate cross-module LINQ joins and group infrastructure concerns by bounded context. |
 | 2026-10-07 | Relational OCC vs. DDD Aggregate Child Mutations (PostgreSQL xmin) | Arch / Concurrency | `Correct` | Identified that child table inserts do not bump parent table xmin in relational databases; resolved by touching parent aggregate state (`UpdatedAt`) to guarantee concurrency conflicts. |
 | 2026-10-07 | Aggregate Root Temporal Encapsulation & Testcontainers Parity over In-Memory Emulators | Arch / Testing | `Correct` | Correctly identified that temporal audit properties (`CreatedAt`, `UpdatedAt`) belong in `AggregateRoot` to enforce uniform consistency boundaries, and challenged SQLite in-memory emulators to ensure 100% production database fidelity in API integration tests. |
+| 2026-10-07 | Pessimistic Locking vs. OCC Retry Storms & Deterministic Deadlock Prevention | Arch / Concurrency | `Correct` | Independently analyzed why OCC creates retry storms on hot items, rejected atomic SQL due to DDD leakage, selected pessimistic row locking (`SELECT FOR UPDATE`), and identified deadlock risks solved by deterministic sorting. |
 
 ---
 

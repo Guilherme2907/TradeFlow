@@ -29,10 +29,10 @@ public class InventoryModuleTests
         var productId2 = ProductId.New();
         var item2 = InventoryItem.Create(productId2, "SKU-VALVE", initialQuantity: 50);
 
-        _inventoryRepository.GetByProductIdAsync(productId1, Arg.Any<CancellationToken>())
-            .Returns(item1);
-        _inventoryRepository.GetByProductIdAsync(productId2, Arg.Any<CancellationToken>())
-            .Returns(item2);
+        _inventoryRepository.GetByProductIdsForUpdateAsync(
+                Arg.Any<IReadOnlyCollection<ProductId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns([item1, item2]);
 
         var request = new ReserveStockRequest(
             Guid.NewGuid(),
@@ -58,10 +58,12 @@ public class InventoryModuleTests
     [Fact]
     public async Task ReserveStockAsync_WhenProductNotFound_ShouldReturnNotFoundErrorAndNotAllocate()
     {
-        // Arrange
+        // Arrange: Missing item not returned by repository
         var missingProductId = ProductId.New();
-        _inventoryRepository.GetByProductIdAsync(missingProductId, Arg.Any<CancellationToken>())
-            .Returns((InventoryItem?)null);
+        _inventoryRepository.GetByProductIdsForUpdateAsync(
+                Arg.Any<IReadOnlyCollection<ProductId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns([]);
 
         var request = new ReserveStockRequest(
             Guid.NewGuid(),
@@ -90,10 +92,10 @@ public class InventoryModuleTests
         var productId2 = ProductId.New();
         var item2 = InventoryItem.Create(productId2, "SKU-VALVE", initialQuantity: 2);
 
-        _inventoryRepository.GetByProductIdAsync(productId1, Arg.Any<CancellationToken>())
-            .Returns(item1);
-        _inventoryRepository.GetByProductIdAsync(productId2, Arg.Any<CancellationToken>())
-            .Returns(item2);
+        _inventoryRepository.GetByProductIdsForUpdateAsync(
+                Arg.Any<IReadOnlyCollection<ProductId>>(),
+                Arg.Any<CancellationToken>())
+            .Returns([item1, item2]);
 
         var request = new ReserveStockRequest(
             Guid.NewGuid(),
@@ -113,5 +115,41 @@ public class InventoryModuleTests
         item1.AllocatedQuantity.Should().Be(0); // Item 1 was NOT mutated
         item2.AllocatedQuantity.Should().Be(0);
         _inventoryRepository.DidNotReceive().Update(Arg.Any<InventoryItem>());
+    }
+
+    [Fact]
+    public async Task ReserveStockAsync_ShouldRequestLocksInDeterministicAscendingOrder_ToPreventDeadlocks()
+    {
+        // Arrange: Prepare two GUIDs where guidHigh > guidLow
+        var guidLow = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var guidHigh = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+        var pLow = new ProductId(guidLow);
+        var pHigh = new ProductId(guidHigh);
+
+        var itemLow = InventoryItem.Create(pLow, "SKU-LOW", initialQuantity: 50);
+        var itemHigh = InventoryItem.Create(pHigh, "SKU-HIGH", initialQuantity: 50);
+
+        IReadOnlyCollection<ProductId>? capturedProductIds = null;
+        _inventoryRepository.GetByProductIdsForUpdateAsync(
+                Arg.Do<IReadOnlyCollection<ProductId>>(ids => capturedProductIds = ids),
+                Arg.Any<CancellationToken>())
+            .Returns([itemLow, itemHigh]);
+
+        // Request items in REVERSE order (High first, Low second)
+        var request = new ReserveStockRequest(
+            Guid.NewGuid(),
+            [
+                new ReservationItemDto(guidHigh, "SKU-HIGH", 5),
+                new ReservationItemDto(guidLow, "SKU-LOW", 5)
+            ]);
+
+        // Act
+        var result = await _module.ReserveStockAsync(request, CancellationToken.None);
+
+        // Assert: Locks must be requested in deterministic ascending order regardless of input ordering
+        result.IsSuccess.Should().BeTrue();
+        capturedProductIds.Should().NotBeNull();
+        capturedProductIds!.Select(p => p.Value).Should().ContainInOrder(guidLow, guidHigh);
     }
 }
