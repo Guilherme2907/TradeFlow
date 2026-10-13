@@ -1,4 +1,7 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TradeFlow.Application.Inventory.Contracts;
@@ -23,39 +26,18 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Database")
             ?? "Host=localhost;Port=5432;Database=tradeflow;Username=postgres;Password=postgres";
 
-        services.AddDbContext<OrdersDbContext>(options =>
+        if (useInMemory)
         {
-            if (useInMemory)
-            {
-                var dbName = configuration["InMemoryDatabaseName"] ?? "TradeFlow_Orders_TestDb";
-                options.UseInMemoryDatabase(dbName);
-            }
-            else
-            {
-                options.UseNpgsql(connectionString, npgsqlOptions =>
-                {
-                    npgsqlOptions.MigrationsAssembly(typeof(OrdersDbContext).Assembly.FullName);
-                    npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
-                });
-            }
-        });
-
-        services.AddDbContext<InventoryDbContext>(options =>
+            var dbName = configuration["InMemoryDatabaseName"];
+            services.AddModuleDbContext<OrdersDbContext>(options =>
+                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Orders_TestDb"));
+            services.AddModuleDbContext<InventoryDbContext>(options =>
+                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Inventory_TestDb"));
+        }
+        else
         {
-            if (useInMemory)
-            {
-                var dbName = configuration["InMemoryDatabaseName"] ?? "TradeFlow_Inventory_TestDb";
-                options.UseInMemoryDatabase(dbName);
-            }
-            else
-            {
-                options.UseNpgsql(connectionString, npgsqlOptions =>
-                {
-                    npgsqlOptions.MigrationsAssembly(typeof(InventoryDbContext).Assembly.FullName);
-                    npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
-                });
-            }
-        });
+            services.AddNpgsqlModuleDbContexts(connectionString);
+        }
 
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IInventoryRepository, InventoryRepository>();
@@ -63,6 +45,53 @@ public static class DependencyInjection
         services.AddScoped<IInventoryReservationService, InventoryReservationServiceAdapter>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers every module DbContext on a single request-scoped PostgreSQL connection so the
+    /// <see cref="UnitOfWork"/> can coordinate one physical transaction (ADR-0010).
+    /// Adding a new module only requires one additional <c>AddModuleDbContext</c> line here.
+    /// </summary>
+    public static IServiceCollection AddNpgsqlModuleDbContexts(
+        this IServiceCollection services,
+        string connectionString,
+        Action<NpgsqlDbContextOptionsBuilder>? configureNpgsql = null)
+    {
+        services.AddScoped<DbConnection>(_ => new NpgsqlConnection(connectionString));
+
+        services.AddModuleDbContext<OrdersDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(OrdersDbContext), configureNpgsql)));
+
+        services.AddModuleDbContext<InventoryDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(InventoryDbContext), configureNpgsql)));
+
+        return services;
+    }
+
+    private static void ConfigureNpgsql(
+        NpgsqlDbContextOptionsBuilder npgsql,
+        Type contextType,
+        Action<NpgsqlDbContextOptionsBuilder>? extra)
+    {
+        npgsql.MigrationsAssembly(contextType.Assembly.FullName);
+        npgsql.EnableRetryOnFailure(maxRetryCount: 3);
+        extra?.Invoke(npgsql);
+    }
+
+    private static IServiceCollection AddModuleDbContext<TContext>(
+        this IServiceCollection services,
+        Action<DbContextOptionsBuilder> configure)
+        where TContext : DbContext, IModuleDbContext
+        => services.AddModuleDbContext<TContext>((_, options) => configure(options));
+
+    private static IServiceCollection AddModuleDbContext<TContext>(
+        this IServiceCollection services,
+        Action<IServiceProvider, DbContextOptionsBuilder> configure)
+        where TContext : DbContext, IModuleDbContext
+    {
+        services.AddDbContext<TContext>(configure);
+        services.AddScoped<IModuleDbContext>(sp => sp.GetRequiredService<TContext>());
         return services;
     }
 }

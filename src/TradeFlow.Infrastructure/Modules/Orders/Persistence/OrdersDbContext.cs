@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TradeFlow.Domain.Orders;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Configurations;
+using TradeFlow.Infrastructure.Persistence;
 
 namespace TradeFlow.Infrastructure.Modules.Orders.Persistence;
 
@@ -8,7 +9,7 @@ namespace TradeFlow.Infrastructure.Modules.Orders.Persistence;
 /// Dedicated DbContext for the Orders bounded context (ADR-0007).
 /// Fully encapsulates the 'orders' PostgreSQL schema and entities (Order, OrderLine).
 /// </summary>
-public class OrdersDbContext : DbContext
+public class OrdersDbContext : DbContext, IModuleDbContext
 {
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();

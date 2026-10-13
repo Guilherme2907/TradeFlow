@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,9 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
+using TradeFlow.Infrastructure;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
+using TradeFlow.Infrastructure.Persistence;
 using Xunit;
 
 namespace TradeFlow.Api.IntegrationTests.Infrastructure;
@@ -38,20 +41,17 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
                 d.ServiceType == typeof(DbContextOptions<OrdersDbContext>) ||
                 d.ServiceType == typeof(DbContextOptions<InventoryDbContext>) ||
                 d.ServiceType == typeof(OrdersDbContext) ||
-                d.ServiceType == typeof(InventoryDbContext)).ToList();
+                d.ServiceType == typeof(InventoryDbContext) ||
+                d.ServiceType == typeof(IModuleDbContext) ||
+                d.ServiceType == typeof(DbConnection)).ToList();
 
             foreach (var descriptor in descriptors)
             {
                 services.Remove(descriptor);
             }
 
-            var connectionString = _dbContainer.GetConnectionString();
-
-            services.AddDbContext<OrdersDbContext>(options =>
-                options.UseNpgsql(connectionString));
-
-            services.AddDbContext<InventoryDbContext>(options =>
-                options.UseNpgsql(connectionString));
+            // Same registration path as production: module contexts sharing one scoped connection (ADR-0010)
+            services.AddNpgsqlModuleDbContexts(_dbContainer.GetConnectionString());
 
             // Initialize PostgreSQL schemas and tables for both bounded contexts
             var sp = services.BuildServiceProvider();

@@ -19,6 +19,9 @@ public class SubmitOrderCommandHandlerTests
 
     public SubmitOrderCommandHandlerTests()
     {
+        _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<Task<Result>>>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<Func<Task<Result>>>()());
+
         _handler = new SubmitOrderCommandHandler(_orderRepository, _inventoryService, _unitOfWork);
     }
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence.Configurations;
+using TradeFlow.Infrastructure.Persistence;
 
 namespace TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 
@@ -8,7 +9,7 @@ namespace TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 /// Dedicated DbContext for the Inventory bounded context (ADR-0007).
 /// Fully encapsulates the 'inventory' PostgreSQL schema and entities (InventoryItem).
 /// </summary>
-public class InventoryDbContext : DbContext
+public class InventoryDbContext : DbContext, IModuleDbContext
 {
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
 

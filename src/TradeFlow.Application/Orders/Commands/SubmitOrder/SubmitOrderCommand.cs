@@ -35,33 +35,37 @@ public sealed class SubmitOrderCommandHandler : IRequestHandler<SubmitOrderComma
 
     public async Task<Result> Handle(SubmitOrderCommand request, CancellationToken cancellationToken)
     {
-        var order = await _orderRepository.GetByIdAsync(new OrderId(request.OrderId), cancellationToken);
-        if (order is null)
+        // ADR-0010 retry contract: the delegate may be re-executed after a transient failure, so every
+        // aggregate it mutates is loaded inside it (the UnitOfWork clears trackers between attempts).
+        // Only non-locking reads precede the SELECT FOR UPDATE, keeping lock duration minimal.
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            return Result.Failure(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
-        }
+            var order = await _orderRepository.GetByIdAsync(new OrderId(request.OrderId), cancellationToken);
+            if (order is null)
+            {
+                return Result.Failure(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
+            }
 
-        // Verify domain invariants prior to reservation attempt (intercepted by DomainExceptionBehavior)
-        order.ValidateCanSubmit();
+            // Verify domain invariants before attempting any reservation (fail fast, no locks taken yet)
+            order.ValidateCanSubmit();
 
-        // Coordinate inventory reservation within the monolith use case per ADR-0002
-        var reservationItems = order.Lines
-            .Select(line => new ReservationItem(line.ProductId, line.Sku, line.Quantity))
-            .ToList();
+            var reservationItems = order.Lines
+                .Select(line => new ReservationItem(line.ProductId, line.Sku, line.Quantity))
+                .ToList();
 
-        var reservationResult = await _inventoryService.ReserveStockAsync(order.Id, reservationItems, cancellationToken);
-        if (reservationResult.IsFailure)
-        {
-            // If inventory cannot fulfill the reservation, order remains in Draft without mutation
-            return Result.Failure(reservationResult.Error);
-        }
+            var reservationResult = await _inventoryService.ReserveStockAsync(order.Id, reservationItems, cancellationToken);
+            if (reservationResult.IsFailure)
+            {
+                return Result.Failure(reservationResult.Error);
+            }
 
-        // Finalize state transition to Submitted
-        order.Submit();
+            // Finalize state transition to Submitted
+            order.Submit();
+            _orderRepository.Update(order);
 
-        _orderRepository.Update(order);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success();
+            return Result.Success();
+        }, cancellationToken);
     }
 }

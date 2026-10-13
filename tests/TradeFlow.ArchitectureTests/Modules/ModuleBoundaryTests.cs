@@ -83,4 +83,54 @@ public class ModuleBoundaryTests
         result.IsSuccessful.Should().BeTrue(
             $"Inventory application module must not depend on Orders. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
     }
+
+    private static readonly Assembly InfrastructureAssembly = typeof(TradeFlow.Infrastructure.DependencyInjection).Assembly;
+
+    [Fact]
+    public void OrdersInfrastructure_ShouldNotDependOn_InventoryPersistenceOrDomain()
+    {
+        // ADR-0010: module DbContexts/repositories may only touch their own module's entities (no cross-module joins)
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Infrastructure.Modules.Orders.Persistence")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                InventoryDomainNamespace,
+                "TradeFlow.Infrastructure.Modules.Inventory")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Orders persistence must not reference Inventory. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void InventoryInfrastructure_ShouldNotDependOn_OrdersPersistenceOrDomain()
+    {
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Infrastructure.Modules.Inventory")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                OrdersDomainNamespace,
+                "TradeFlow.Infrastructure.Modules.Orders")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Inventory persistence must not reference Orders. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void ModuleDbContexts_ShouldImplement_IModuleDbContext()
+    {
+        // Guarantees every module context participates in the shared UnitOfWork transaction
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .Inherit(typeof(Microsoft.EntityFrameworkCore.DbContext))
+            .Should()
+            .ImplementInterface(typeof(TradeFlow.Infrastructure.Persistence.IModuleDbContext))
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Every DbContext must implement IModuleDbContext. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
 }
