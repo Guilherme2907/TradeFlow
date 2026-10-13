@@ -7,11 +7,11 @@ public interface IUnitOfWork
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Runs <paramref name="operation"/> inside a single transaction spanning all module contexts (ADR-0010).
+    /// Executes <paramref name="operation"/> inside a single atomic transaction spanning all registered module contexts (ADR-0010).
     /// <para>
-    /// RETRY CONTRACT: after a transient failure the delegate is executed again. It must therefore load every
-    /// aggregate it mutates inside the delegate; change trackers are cleared before each re-attempt.
-    /// A failed <see cref="Result"/> rolls the transaction back.
+    /// FAIL-FAST CONTRACT: In critical transaction processing with pessimistic locks, transactions are strictly
+    /// fail-fast (no transparent ORM-level retries). Any failure rolls back all participating contexts.
+    /// Resilience and retries are managed at the edge/boundary using idempotency keys and fresh execution scopes.
     /// </para>
     /// </summary>
     Task<Result> ExecuteInTransactionAsync(Func<Task<Result>> operation, CancellationToken cancellationToken = default);

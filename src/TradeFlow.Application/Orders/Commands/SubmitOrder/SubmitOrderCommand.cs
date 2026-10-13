@@ -35,24 +35,22 @@ public sealed class SubmitOrderCommandHandler : IRequestHandler<SubmitOrderComma
 
     public async Task<Result> Handle(SubmitOrderCommand request, CancellationToken cancellationToken)
     {
-        // ADR-0010 retry contract: the delegate may be re-executed after a transient failure, so every
-        // aggregate it mutates is loaded inside it (the UnitOfWork clears trackers between attempts).
-        // Only non-locking reads precede the SELECT FOR UPDATE, keeping lock duration minimal.
+        var order = await _orderRepository.GetByIdAsync(new OrderId(request.OrderId), cancellationToken);
+        if (order is null)
+        {
+            return Result.Failure(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
+        }
+
+        // Verify domain invariants upfront outside the transaction (Narrow Transaction Principle: fail fast with 0 locks)
+        order.ValidateCanSubmit();
+
+        var reservationItems = order.Lines
+            .Select(line => new ReservationItem(line.ProductId, line.Sku, line.Quantity))
+            .ToList();
+
+        // Fail-fast narrow transaction: open transaction solely to acquire row locks, mutate state, and commit
         return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            var order = await _orderRepository.GetByIdAsync(new OrderId(request.OrderId), cancellationToken);
-            if (order is null)
-            {
-                return Result.Failure(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
-            }
-
-            // Verify domain invariants before attempting any reservation (fail fast, no locks taken yet)
-            order.ValidateCanSubmit();
-
-            var reservationItems = order.Lines
-                .Select(line => new ReservationItem(line.ProductId, line.Sku, line.Quantity))
-                .ToList();
-
             var reservationResult = await _inventoryService.ReserveStockAsync(order.Id, reservationItems, cancellationToken);
             if (reservationResult.IsFailure)
             {

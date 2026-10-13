@@ -18,8 +18,8 @@ using Xunit;
 namespace TradeFlow.Infrastructure.IntegrationTests.Persistence;
 
 /// <summary>
-/// ADR-0010: verifies the module-agnostic UnitOfWork keeps a single transaction across module contexts
-/// and that a retried delegate does not observe mutated in-memory state from the failed attempt.
+/// ADR-0010: verifies the module-agnostic UnitOfWork coordinates a single atomic transaction across module contexts
+/// using a fail-fast transaction boundary (no transparent ORM retry loops for critical pessimistic operations).
 /// </summary>
 [Trait("Category", "RequiresDocker")]
 public class UnitOfWorkTests : IAsyncLifetime
@@ -30,7 +30,7 @@ public class UnitOfWorkTests : IAsyncLifetime
         .WithPassword("test_pass")
         .Build();
 
-    private readonly TransientFailureOnceInterceptor _interceptor = new();
+    private readonly ThrowOnFirstUpdateInterceptor _interceptor = new();
 
     private NpgsqlConnection _connection = null!;
     private OrdersDbContext _ordersContext = null!;
@@ -58,15 +58,15 @@ public class UnitOfWorkTests : IAsyncLifetime
             await creator.CreateTablesAsync();
         }
 
-        // Runtime wiring: both module contexts share ONE connection, with retry enabled (as in production)
+        // Runtime wiring: both module contexts share ONE connection with standard fail-fast strategy (ADR-0010)
         _connection = new NpgsqlConnection(_dbContainer.GetConnectionString());
 
         _ordersContext = new OrdersDbContext(new DbContextOptionsBuilder<OrdersDbContext>()
-            .UseNpgsql(_connection, o => o.EnableRetryOnFailure(3, TimeSpan.FromMilliseconds(100), null))
+            .UseNpgsql(_connection)
             .Options);
 
         _inventoryContext = new InventoryDbContext(new DbContextOptionsBuilder<InventoryDbContext>()
-            .UseNpgsql(_connection, o => o.EnableRetryOnFailure(3, TimeSpan.FromMilliseconds(100), null))
+            .UseNpgsql(_connection)
             .AddInterceptors(_interceptor)
             .Options);
 
@@ -109,9 +109,6 @@ public class UnitOfWorkTests : IAsyncLifetime
         return (order.Id, productId);
     }
 
-    /// <summary>
-    /// Mimics SubmitOrderCommandHandler: loads aggregates inside the delegate, mutates both modules, saves.
-    /// </summary>
     private Task<Result> SubmitAndAllocateAsync(OrderId orderId, ProductId productId) =>
         _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
@@ -176,42 +173,44 @@ public class UnitOfWorkTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExecuteInTransactionAsync_WhenTransientFailureOccurs_ShouldRetryWithCleanStateAndApplyChangesExactlyOnce()
+    public async Task ExecuteInTransactionAsync_WhenDatabaseExceptionOccurs_ShouldRollbackBothModulesAndRethrowFailFast()
     {
         var (orderId, productId) = await SeedOrderAndStockAsync();
 
-        // First inventory UPDATE fails transiently AFTER the orders UPDATE already ran inside the transaction.
-        // Without tracker reset, retry would throw (order already Submitted in memory) or double-allocate.
-        var result = await SubmitAndAllocateAsync(orderId, productId);
+        // The interceptor injects an exception during UPDATE on inventory
+        var act = async () => await SubmitAndAllocateAsync(orderId, productId);
 
-        result.IsSuccess.Should().BeTrue();
-        _interceptor.FailureCount.Should().Be(1, "exactly one transient failure was injected");
+        // Assert: Throws immediately (fail fast, no hidden ORM retries)
+        var thrown = await act.Should().ThrowAsync<Exception>();
+        thrown.Which.ToString().Should().Contain("Simulated network drop");
+        _interceptor.InjectedFailureCount.Should().Be(1);
 
+        // Assert: Both modules were rolled back cleanly; zero partial state persisted
         var (orders, inventory) = CreateFreshContexts();
         await using (orders)
         await using (inventory)
         {
-            (await orders.Orders.AsNoTracking().SingleAsync(o => o.Id == orderId)).Status.Should().Be(OrderStatus.Submitted);
+            (await orders.Orders.AsNoTracking().SingleAsync(o => o.Id == orderId)).Status.Should().Be(OrderStatus.Draft);
             (await inventory.InventoryItems.AsNoTracking().SingleAsync(i => i.ProductId == productId))
-                .AllocatedQuantity.Should().Be(5, "the reservation must be applied exactly once despite the retry");
+                .AllocatedQuantity.Should().Be(0, "the transaction rollback must ensure zero stock was allocated");
         }
     }
 
-    private sealed class TransientFailureOnceInterceptor : DbCommandInterceptor
+    private sealed class ThrowOnFirstUpdateInterceptor : DbCommandInterceptor
     {
         private bool _enabled = true;
 
-        public int FailureCount { get; private set; }
+        public int InjectedFailureCount { get; private set; }
 
         public void Disable() => _enabled = false;
 
         private void MaybeFail(DbCommand command)
         {
-            if (_enabled && FailureCount == 0 &&
+            if (_enabled && InjectedFailureCount == 0 &&
                 command.CommandText.TrimStart().StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase))
             {
-                FailureCount++;
-                throw new NpgsqlException("Simulated transient failure", new IOException("connection reset"));
+                InjectedFailureCount++;
+                throw new NpgsqlException("Simulated network drop / hardware failure", new IOException("connection reset"));
             }
         }
 

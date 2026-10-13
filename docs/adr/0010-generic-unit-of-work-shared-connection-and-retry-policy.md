@@ -1,50 +1,77 @@
-# ADR-0010: Generic Unit of Work over a Shared Connection and Retry-Safe Transaction Delegates
+# ADR-0010: Generic Unit of Work over Shared Connection and Fail-Fast Transaction Boundaries
 
 - **Status**: Accepted
 - **Date**: 2026-10-13
 - **Deciders**: Developer & AI Mentor (Lead Architect)
-- **Relevant Issues / Context**: Follow-up to ADR-0008 (dedicated DbContexts) and ADR-0009 (pessimistic locking). Refines the cross-module transaction mechanism introduced in `UnitOfWork.ExecuteInTransactionAsync`.
+- **Relevant Issues / Context**: Follow-up to ADR-0008 (dedicated DbContexts) and ADR-0009 (pessimistic locking). Refines cross-module transaction coordination and resilience strategy in `UnitOfWork.ExecuteInTransactionAsync`.
 
 ---
 
 ## 1. Context & Background
-ADR-0008 gave each bounded context its own `DbContext`. ADR-0009 requires `SELECT ... FOR UPDATE` to run inside an explicit, narrow transaction. The first `UnitOfWork` implementation hard-coded `OrdersDbContext` and `InventoryDbContext`, nesting one execution strategy and one transaction per module, plus an `if/else` on connection identity.
+ADR-0008 isolated bounded contexts into dedicated `DbContext` classes (`OrdersDbContext`, `InventoryDbContext`). ADR-0009 introduced pessimistic row locks (`SELECT FOR UPDATE`) with deterministic ordering to eliminate inventory contention and deadlocks. 
+
+When coordinating these two modules in a single atomic order-submission use case, two engineering forces collided:
+1. **Code Scalability**: Hardcoding specific DbContexts in `UnitOfWork` violated the Open/Closed Principle. Adding a 3rd or 4th module would require cascading `DbContext` parameters and unmanageable nested transaction blocks.
+2. **Resilience vs. State Integrity**: Configuring EF Core's `EnableRetryOnFailure` causes the ORM to attempt transparent automatic retries of failed user transactions. However, transactions that mutate in-memory aggregates and acquire pessimistic locks behave unpredictably when transparently re-executed.
+
+---
 
 ## 2. Problem Statement
-1. **Scalability of the code**: every new module forced edits to `UnitOfWork` and deeper nesting (violates open/closed).
-2. **Retry safety**: with `EnableRetryOnFailure`, EF Core re-executes the whole delegate after a transient failure. The database transaction is rolled back, but tracked entities keep their mutated in-memory state (e.g. `Order.Status == Submitted`, `InventoryItem.AvailableQuantity` already decreased). A naive retry either throws a domain exception or applies the allocation twice.
+1. How do we allow `UnitOfWork` to coordinate an arbitrary number of module contexts without knowing them by name ($O(1)$ complexity relative to module count)?
+2. Is transparent ORM-level transaction retrying (`NpgsqlRetryingExecutionStrategy`) appropriate for mission-critical transactional operations involving pessimistic row locks and stateful aggregate mutations?
+
+---
 
 ## 3. Options Considered
 
-### Option A: Shared scoped connection + generic UoW (Selected)
-- All module contexts in a request scope use the same `DbConnection`. `UnitOfWork` receives `IEnumerable<IModuleDbContext>`, opens one transaction on the first context and enlists the others (`UseTransactionAsync`).
-- *Pros*: code is O(1) in number of modules; module isolation (separate DbContexts, no cross-module LINQ joins) is preserved; a single physical transaction.
-- *Cons*: modules must live in one database (already true, ADR-0002); extraction to a microservice later requires replacing this with an outbox (Phase 3).
+### Option A: Shared Scoped Connection with Transparent ORM Retries
+- Enlist all contexts in a single physical connection; chain `strategy.ExecuteAsync` and reset `ChangeTracker.Clear()` between retry attempts.
+- *Pros*: Handles momentary network blips without returning errors to callers.
+- *Cons*:
+  - **Ghost In-Memory Mutations**: Relies on strict developer discipline to reload every aggregate inside the transaction delegate; any external aggregate state becomes corrupt on attempt 2.
+  - **Amplified Lock Contention**: Retrying under pessimistic contention holds locks longer, cascading database connection pool starvation and tail latency.
+  - **High Cognitive Overhead**: Convoluted execution pipeline and tracker-clearing gymnastics.
 
-### Option B: Single DbContext with per-module configurations
-- *Pros*: trivial transactions.
-- *Cons*: loses compile-time protection against cross-module joins; would need to be compensated purely by architecture tests.
+### Option B: Shared Scoped Connection with Fail-Fast Atomic Transactions (Selected)
+- All module `DbContext`s in a request scope share one physical `NpgsqlConnection`. `UnitOfWork` accepts `IEnumerable<IModuleDbContext>`, opens a transaction on the primary context, and enlists the rest via `UseTransactionAsync`.
+- **Fail-Fast Boundary**: Disable ORM-level transparent transaction retries. If a database error or network failure occurs, the transaction rolls back immediately and throws.
+- **Boundary-Level Resilience**: Retries belong at the protocol edge (e.g., HTTP `Idempotency-Key` or consumer message redelivery), where a retry is dispatched as a brand new request with a clean, isolated DI scope.
+- *Pros*:
+  - Simple, robust, battle-tested production model (standard in banking and payment systems like Stripe).
+  - Enforces the **Narrow Transaction Principle**: invariants validated upfront with zero locks; transaction held only during row-locking and writes.
+  - Zero risk of in-memory state contamination or duplicate side effects.
+  - $O(1)$ scalability: adding a module requires only registering its `DbContext : IModuleDbContext`.
+- *Cons*: Transient network glitches result in an explicit error (HTTP 500 / 409 / 503) that the caller must retry.
 
-### Option C: Eventual consistency (Outbox/Saga)
-- *Pros*: the target architecture for distributed modules.
-- *Cons*: scheduled for Phase 3; premature now.
+### Option C: Single Monolithic DbContext
+- Rejected: Loses compile-time boundary protection against cross-module joins (ADR-0008).
 
-### Option D: `TransactionScope` over multiple connections
-- Rejected: escalates to distributed transactions, poorly supported by Npgsql.
+### Option D: Distributed Transactions (`TransactionScope` / 2PC)
+- Rejected: Heavy, brittle, poor PostgreSQL / Npgsql support.
+
+---
 
 ## 4. Decision
-Option A, with the following rules:
+We select **Option B: Shared Scoped Connection with Fail-Fast Atomic Transactions**.
 
-1. Module DbContexts implement the marker `IModuleDbContext` and are registered through a single helper; they share one scoped `DbConnection`.
-2. `UnitOfWork` is module-agnostic. Each context contributes its own execution strategy (folded, not hand-nested) and the transaction is committed or rolled back once.
-3. **Retry contract**: the delegate passed to `ExecuteInTransactionAsync` may run more than once. It MUST load every aggregate it mutates *inside* the delegate. On every attempt after the first, the `UnitOfWork` clears the change trackers of all module contexts so the reload hits the database.
-4. `SubmitOrderCommandHandler` loads and validates the order inside the delegate.
-5. Module isolation is enforced by architecture tests: a module's `DbContext` and repositories may only reference entities of their own module.
+1. **Shared Connection**: In `DependencyInjection.cs`, `AddNpgsqlModuleDbContexts` registers a single scoped `DbConnection`. All module `DbContext`s implement `IModuleDbContext` and share this connection.
+2. **Generic Fail-Fast UnitOfWork**: `UnitOfWork` receives `IEnumerable<IModuleDbContext>`. It begins a single transaction on the primary context and enlists all other contexts via `UseTransactionAsync`. Any failure triggers an immediate rollback and rethrow.
+3. **Narrow Transaction Principle**: Application handlers validate domain invariants upfront outside the transaction (`order.ValidateCanSubmit()`). The transaction is opened exclusively to acquire pessimistic locks, mutate aggregate state, and commit.
+4. **Resilience at the Edge**: Transparent ORM retries on write transactions are banned. Retries are delegated to API clients utilizing idempotency mechanisms.
+
+---
 
 ## 5. Trade-offs & Consequences
-- **Gains**: adding a module = one registration line; retries are deterministic; boundaries remain compile-time and CI enforced.
-- **Costs**: the transaction now also covers the (non-locking) order read; handlers must follow the "load inside the delegate" convention (documented on `IUnitOfWork` and covered by a transient-failure integration test).
+- **Positive Consequences (Gains)**:
+  - Clean, auditable, and production-hardened code without hidden retry loops.
+  - Absolute atomicity across all monolith modules.
+  - Full protection against duplicate allocations and in-memory corruption.
+  - Fully scalable to $N$ modules without modifying `UnitOfWork`.
+- **Negative Consequences (Costs / Liabilities)**:
+  - All participating modules must reside within the same physical PostgreSQL database (expected in Phase 2 modular monolith).
+  - Clients must handle transient errors by retrying at the HTTP/API level.
+
+---
 
 ## 6. Conditions for Revisiting
-- A module needs its own database or becomes a service: replace the shared-transaction path with Transactional Outbox (Phase 3).
-- Number of concurrent transactions makes connection pool usage a bottleneck: reconsider the scope of the transaction or retry policy.
+- **Phase 3 (Service Extraction / Outbox)**: When a bounded context is split into an independent database or microservice, the shared-connection unit of work will be replaced by the Transactional Outbox pattern and asynchronous messaging (RabbitMQ).

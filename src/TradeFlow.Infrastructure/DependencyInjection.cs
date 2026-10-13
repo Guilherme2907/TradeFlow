@@ -75,7 +75,6 @@ public static class DependencyInjection
         Action<NpgsqlDbContextOptionsBuilder>? extra)
     {
         npgsql.MigrationsAssembly(contextType.Assembly.FullName);
-        npgsql.EnableRetryOnFailure(maxRetryCount: 3);
         extra?.Invoke(npgsql);
     }
 
