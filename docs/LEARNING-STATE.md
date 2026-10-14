@@ -42,13 +42,15 @@ This document is the persistent registry of technical competencies, architectura
 | :--- | :--- | :--- | :--- |
 | **Domain-Driven Design (Aggregates & Invariants)** | `Strong` | 2026-10-06 | Implemented `Order` and `InventoryItem` aggregates with encapsulated state, non-public setters, `Money` value object, immutable snapshots, and pure unit tests. |
 | **Modular Monolith Boundary Enforcement** | `Strong` | 2026-10-06 | Successfully defended PostgreSQL schema isolation (`orders.*` vs `inventory.*`) and explicit in-process contract facades (`IInventoryModule`), backed by 14 NetArchTest fitness tests. |
-| **Transactional Outbox Pattern** | `Not Started` | — | Planned for Phase 3 |
-| **At-Least-Once Delivery & Idempotent Consumers** | `Not Started` | — | Planned for Phase 3 |
+| **Transactional Outbox Pattern** | `Good` | 2026-10-13 | Articulated the Dual-Write problem (phantom events vs dropped events), evaluated 2PC/XA latency and availability pitfalls, and implemented automatic persistence via `DomainEventsToOutboxMessagesInterceptor` to `orders.outbox_messages` in PostgreSQL. Verified atomic persistence and rollback isolation via Testcontainers (ADR-0011). |
+| **At-Least-Once Delivery & Idempotent Consumers** | `Good` | 2026-10-13 | Identified that at-least-once delivery causes duplicate messages and analyzed consumer deduplication via Inbox table pattern (unique message ID tracking) and semantic state idempotency (ADR-0011). |
 | **RabbitMQ Exchange/Queue Architecture & DLQs** | `Not Started` | — | Planned for Phase 3 |
 | **Apache Kafka Partitioning & Offset Management**| `Not Started` | — | Planned for Phase 4 |
 | **OAuth2 / OpenID Connect Token Lifecycle & SSO** | `Not Started` | — | Planned for Phase 5 |
 | **Distributed Caching, Stampede & Cache-Aside** | `Not Started` | — | Planned for Phase 7 |
 | **Database Concurrency, MVCC & Lock Contention**| `Strong` | 2026-10-07 | Independently analyzed OCC retry storm risks, evaluated DDD trade-offs of atomic SQL updates, designed Pessimistic Locking with row-level locks, and enforced deterministic ordering to prevent deadlocks (ADR-0009). Verified with high-concurrency Testcontainers. |
+| **Generic Cross-Context Unit of Work ($O(1)$ Scaling)** | `Strong` | 2026-10-13 | Designed generic `UnitOfWork` accepting `IEnumerable<IModuleDbContext>` over shared scoped `DbConnection`, decoupling UoW from concrete module names while maintaining schema isolation (ADR-0010). |
+| **Fail-Fast Transactions vs. ORM Transparent Retries** | `Strong` | 2026-10-13 | Articulated that transparent ORM retries (`EnableRetryOnFailure`) on write transactions with pessimistic locks cause ghost in-memory mutations and prolonged contention; advocated for fail-fast atomic transactions with resilience delegated to boundary protocols (Idempotency Keys). |
 | **Distributed Tracing & OpenTelemetry** | `Not Started` | — | Planned for Phase 7 |
 | **Kubernetes Core Constructs (Deployments, Ingress)**| `Not Started` | — | Planned for Phase 8 |
 | **Infrastructure as Code with Terraform** | `Not Started` | — | Planned for Phase 8 |
@@ -72,12 +74,12 @@ Testing is a primary engineering axis. Each level is tracked independently to en
 | **9. Performance Testing** | `Not Started` | No (Phase 7) | — | — | — | — |
 | **10. Architecture Testing** | `Strong` | Yes (Phase 2) | — | Multi-project explosion vs single-project modularity | NetArchTest layer rules, entity encapsulation, Anti-Backdoor rule, bounded context isolation | 2026-10-06 |
 
-*Active Testing Baseline (82 passing tests)*:
+*Active Testing Baseline (88 passing tests)*:
 - Unit/Domain: 41 tests (Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
 - Unit/Application: 17 tests (Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
-- Architecture: 14 tests (Layer dependencies, entity encapsulation, Anti-Backdoor rule, Module boundaries)
+- Architecture: 17 tests (Layer dependencies, entity encapsulation, Anti-Backdoor rule, Module boundaries, infrastructure isolation, IModuleDbContext enforcement)
 - API Integration: 5 tests (HTTP contracts, RFC 7807 problem details, real PostgreSQL cross-context database commits)
-- Infrastructure Integration: 5 tests (Real PostgreSQL in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention)
+- Infrastructure Integration: 8 tests (Real PostgreSQL in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback)
 
 ---
 
@@ -96,6 +98,7 @@ Tracks whether architectural and testing choices were defended and explained ind
 | ADR-0007: Modular Monolith PostgreSQL Schema Isolation & Module Contracts | Arch | Yes (defended schema separation & explicit module contracts over mediator buses) | Low (Developer independently articulated schema boundaries and `IInventoryModule` facade rationale) | 2026-10-06 |
 | ADR-0008: Modular Infrastructure Organization & Dedicated DbContexts | Arch / Persistence | Yes (proposed module-based folder structure and separate DbContexts per bounded context) | Low (Developer independently proposed separate DbContexts and module folders) | 2026-10-07 |
 | ADR-0009: Pessimistic Row Locking and Deterministic Ordering for Inventory Contention | Arch / Concurrency | Yes (independently evaluated OCC retry storms and selected pessimistic row locking with deterministic sorting) | Low (Developer independently articulated failure modes and chosen strategy) | 2026-10-07 |
+| ADR-0010: Generic Unit of Work over Shared Connection and Fail-Fast Transaction Boundaries | Arch / Persistence | Yes (challenged UoW scalability across modules and recognized danger of ORM retries in critical systems) | Low (Developer independently questioned UoW module scalability and advocated removing ORM retry loops) | 2026-10-13 |
 
 ---
 
@@ -120,6 +123,7 @@ Logs technical and testing questions asked during sessions to gauge retention, r
 | 2026-10-07 | Relational OCC vs. DDD Aggregate Child Mutations (PostgreSQL xmin) | Arch / Concurrency | `Correct` | Identified that child table inserts do not bump parent table xmin in relational databases; resolved by touching parent aggregate state (`UpdatedAt`) to guarantee concurrency conflicts. |
 | 2026-10-07 | Aggregate Root Temporal Encapsulation & Testcontainers Parity over In-Memory Emulators | Arch / Testing | `Correct` | Correctly identified that temporal audit properties (`CreatedAt`, `UpdatedAt`) belong in `AggregateRoot` to enforce uniform consistency boundaries, and challenged SQLite in-memory emulators to ensure 100% production database fidelity in API integration tests. |
 | 2026-10-07 | Pessimistic Locking vs. OCC Retry Storms & Deterministic Deadlock Prevention | Arch / Concurrency | `Correct` | Independently analyzed why OCC creates retry storms on hot items, rejected atomic SQL due to DDD leakage, selected pessimistic row locking (`SELECT FOR UPDATE`), and identified deadlock risks solved by deterministic sorting. |
+| 2026-10-13 | Multi-context UnitOfWork scalability & why transparent ORM retries are dangerous | Arch / Persistence | `Correct` | Challenged hardcoded DbContext parameters in `UnitOfWork` as unscalable and independently reasoned that transparent ORM retries are risky for critical production transactions compared to fail-fast boundaries with edge idempotency. |
 
 ---
 

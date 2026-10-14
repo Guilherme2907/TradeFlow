@@ -12,6 +12,7 @@ using TradeFlow.Domain.Orders;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
+using TradeFlow.Infrastructure.Modules.Orders.Persistence.Outbox;
 using TradeFlow.Infrastructure.Persistence;
 
 namespace TradeFlow.Infrastructure;
@@ -22,6 +23,8 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<DomainEventsToOutboxMessagesInterceptor>();
+
         var useInMemory = bool.TryParse(configuration["UseInMemoryDatabase"], out var isInMemory) && isInMemory;
         var connectionString = configuration.GetConnectionString("Database")
             ?? "Host=localhost;Port=5432;Database=tradeflow;Username=postgres;Password=postgres";
@@ -29,8 +32,9 @@ public static class DependencyInjection
         if (useInMemory)
         {
             var dbName = configuration["InMemoryDatabaseName"];
-            services.AddModuleDbContext<OrdersDbContext>(options =>
-                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Orders_TestDb"));
+            services.AddModuleDbContext<OrdersDbContext>((sp, options) =>
+                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Orders_TestDb")
+                       .AddInterceptors(sp.GetRequiredService<DomainEventsToOutboxMessagesInterceptor>()));
             services.AddModuleDbContext<InventoryDbContext>(options =>
                 options.UseInMemoryDatabase(dbName ?? "TradeFlow_Inventory_TestDb"));
         }
@@ -58,10 +62,12 @@ public static class DependencyInjection
         string connectionString,
         Action<NpgsqlDbContextOptionsBuilder>? configureNpgsql = null)
     {
+        services.AddSingleton<DomainEventsToOutboxMessagesInterceptor>();
         services.AddScoped<DbConnection>(_ => new NpgsqlConnection(connectionString));
 
         services.AddModuleDbContext<OrdersDbContext>((sp, options) =>
-            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(OrdersDbContext), configureNpgsql)));
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(OrdersDbContext), configureNpgsql))
+                   .AddInterceptors(sp.GetRequiredService<DomainEventsToOutboxMessagesInterceptor>()));
 
         services.AddModuleDbContext<InventoryDbContext>((sp, options) =>
             options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(InventoryDbContext), configureNpgsql)));

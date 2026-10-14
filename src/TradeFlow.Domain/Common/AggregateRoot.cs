@@ -4,7 +4,7 @@ namespace TradeFlow.Domain.Common;
 /// Base class for Aggregate Roots that govern an invariant consistency boundary
 /// and emit domain events.
 /// </summary>
-public abstract class AggregateRoot<TId> : Entity<TId> where TId : notnull
+public abstract class AggregateRoot<TId> : Entity<TId>, IHasDomainEvents where TId : notnull
 {
     private readonly List<IDomainEvent> _domainEvents = [];
 
