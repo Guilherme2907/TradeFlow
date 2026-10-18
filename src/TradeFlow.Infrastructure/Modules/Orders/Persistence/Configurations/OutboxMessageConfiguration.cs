@@ -43,6 +43,6 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
 
         builder.HasIndex(x => x.OccurredAt)
             .HasDatabaseName("idx_orders_outbox_unprocessed")
-            .HasFilter("processed_at IS NULL");
+            .HasFilter($"processed_at IS NULL AND retry_count < {OutboxProcessor.MaxRetryCount}");
     }
 }

@@ -42,9 +42,9 @@ This document is the persistent registry of technical competencies, architectura
 | :--- | :--- | :--- | :--- |
 | **Domain-Driven Design (Aggregates & Invariants)** | `Strong` | 2026-10-06 | Implemented `Order` and `InventoryItem` aggregates with encapsulated state, non-public setters, `Money` value object, immutable snapshots, and pure unit tests. |
 | **Modular Monolith Boundary Enforcement** | `Strong` | 2026-10-06 | Successfully defended PostgreSQL schema isolation (`orders.*` vs `inventory.*`) and explicit in-process contract facades (`IInventoryModule`), backed by 14 NetArchTest fitness tests. |
-| **Transactional Outbox Pattern** | `Good` | 2026-10-13 | Articulated the Dual-Write problem (phantom events vs dropped events), evaluated 2PC/XA latency and availability pitfalls, and implemented automatic persistence via `DomainEventsToOutboxMessagesInterceptor` to `orders.outbox_messages` in PostgreSQL. Verified atomic persistence and rollback isolation via Testcontainers (ADR-0011). |
+| **Transactional Outbox Pattern** | `Strong` | 2026-10-18 | Articulated the Dual-Write problem, 2PC/XA pitfalls, `FOR UPDATE SKIP LOCKED` non-blocking multi-pod polling, and poison message isolation (`RetryCount < 5`) to prevent head-of-line blocking. Implemented `DomainEventsToOutboxMessagesInterceptor`, `OutboxProcessor`, and `OutboxPublisherBackgroundService` verified via concurrent Testcontainers (ADR-0011). |
 | **At-Least-Once Delivery & Idempotent Consumers** | `Good` | 2026-10-13 | Identified that at-least-once delivery causes duplicate messages and analyzed consumer deduplication via Inbox table pattern (unique message ID tracking) and semantic state idempotency (ADR-0011). |
-| **RabbitMQ Exchange/Queue Architecture & DLQs** | `Not Started` | — | Planned for Phase 3 |
+| **RabbitMQ Exchange/Queue Architecture & DLQs** | `Needs Review` | 2026-10-18 | Explored the distinction between Producer-side Publisher Confirms (Broker ACK after disk persistence) and Consumer-side ACK/NACK with Dead-Lettering. Practical RabbitMQ implementation next. |
 | **Apache Kafka Partitioning & Offset Management**| `Not Started` | — | Planned for Phase 4 |
 | **OAuth2 / OpenID Connect Token Lifecycle & SSO** | `Not Started` | — | Planned for Phase 5 |
 | **Distributed Caching, Stampede & Cache-Aside** | `Not Started` | — | Planned for Phase 7 |

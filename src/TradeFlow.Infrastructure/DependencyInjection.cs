@@ -9,6 +9,7 @@ using TradeFlow.Application.Inventory.Services;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Domain.Orders;
+using TradeFlow.Infrastructure.Messaging;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
@@ -48,6 +49,15 @@ public static class DependencyInjection
         services.AddScoped<IInventoryModule, InventoryModule>();
         services.AddScoped<IInventoryReservationService, InventoryReservationServiceAdapter>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.AddScoped<IOutboxMessagePublisher, LoggingOutboxMessagePublisher>();
+        services.AddScoped<OutboxProcessor>();
+
+        var workerEnabled = !bool.TryParse(configuration["Outbox:BackgroundWorkerEnabled"], out var isEnabled) || isEnabled;
+        if (!useInMemory && workerEnabled)
+        {
+            services.AddHostedService<OutboxPublisherBackgroundService>();
+        }
 
         return services;
     }

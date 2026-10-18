@@ -13,6 +13,7 @@ using Xunit;
 
 namespace TradeFlow.Api.IntegrationTests.Endpoints;
 
+[Trait("Category", "RequiresDocker")]
 public class OrderEndpointTests : IClassFixture<TradeFlowWebApplicationFactory>
 {
     private readonly HttpClient _client;
