@@ -9,15 +9,15 @@ This document captures the real-time architectural baseline, active modules, tec
 | Attribute | Current Value |
 | :--- | :--- |
 | **Current Stage** | `PHASE 3: Asynchronous Messaging & Transactional Outbox (RabbitMQ)` |
-| **Application Status** | Phase 1 & 2 Complete; Phase 3 Outbox Interceptor & Polling Processor Active |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox) |
+| **Application Status** | Phase 1 & 2 Complete; Phase 3 Transactional Outbox & RabbitMQ Publisher Active |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (15) — 95 passing tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (17) — 97 passing tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-10-18 |
+| **Last Updated** | 2026-10-19 |
 
 > [!NOTE]
-> Phase 3 (Asynchronous Messaging & Transactional Outbox) is active. Domain events (`IDomainEvent`) raised by aggregates (`IHasDomainEvents`) are automatically captured via EF Core's `DomainEventsToOutboxMessagesInterceptor` and atomically persisted to `orders.outbox_messages` (`jsonb` with partial index `WHERE processed_at IS NULL AND retry_count < 5`). `OutboxProcessor` and `OutboxPublisherBackgroundService` poll unprocessed batches inside an explicit transaction using `SELECT ... FOR UPDATE SKIP LOCKED`, isolating poison messages (`retry_count >= 5`) and preventing head-of-line blocking (ADR-0011). All 95 tests run against real PostgreSQL in Docker via Testcontainers.
+> Phase 3 (Asynchronous Messaging & Transactional Outbox) is active. Domain events (`IDomainEvent`) raised by aggregates (`IHasDomainEvents`) are automatically captured via EF Core's `DomainEventsToOutboxMessagesInterceptor` and atomically persisted to `orders.outbox_messages` (`jsonb` with partial index `WHERE processed_at IS NULL AND retry_count < 5`). `OutboxProcessor` and `OutboxPublisherBackgroundService` poll unprocessed batches inside an explicit transaction using `SELECT ... FOR UPDATE SKIP LOCKED` and dispatch events through `RabbitMqOutboxMessagePublisher` over a Singleton TCP `IConnection` (`RabbitMqConnectionManager`) and Scoped `IChannel` with Publisher Confirms (`Basic.Ack`) to a durable Topic Exchange (`tradeflow.events`) with Dead-Letter Exchange (`tradeflow.events.dlx`) topology (ADR-0011). All 97 tests run against real PostgreSQL and RabbitMQ in Docker via Testcontainers.
 
 ---
 
@@ -44,18 +44,18 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ### 2.4 Active Messaging & Integration
 - Asynchronous messaging transition (Phase 3): Transactional Outbox pattern implemented via EF Core `DomainEventsToOutboxMessagesInterceptor`, `orders.outbox_messages` table, `OutboxProcessor` (`FOR UPDATE SKIP LOCKED`), and `OutboxPublisherBackgroundService` (ADR-0011).
-- RabbitMQ broker integration (`RabbitMQ.Client` with Publisher Confirms and Exchange/Queue topology) is the immediate next step.
+- RabbitMQ broker integration (`RabbitMQ.Client` v7.2.2) via `RabbitMqConnectionManager` (Singleton TCP connection), `RabbitMqOutboxMessagePublisher` (Scoped channel with Publisher Confirms), and `RabbitMqTopology` (`tradeflow.events` Topic Exchange + Dead-Letter Exchange `tradeflow.events.dlx`).
 
 ### 2.5 Active Infrastructure & DevOps
-- Docker Desktop installed for Testcontainers PostgreSQL integration tests (`[Trait("Category", "RequiresDocker")]`).
+- Docker Desktop installed for Testcontainers PostgreSQL and RabbitMQ integration tests (`[Trait("Category", "RequiresDocker")]`).
 
 ### 2.6 Active Testing Infrastructure
-- Active (95 automated tests):
+- Active (97 automated tests):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
   - Unit/Application: NSubstitute, FluentAssertions (17 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
   - Architecture: NetArchTest.Rules (17 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation, infrastructure isolation, IModuleDbContext enforcement)
   - API Contract & E2E: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL (5 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits)
-  - Infrastructure Integration: Testcontainers for PostgreSQL (15 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching)
+  - Infrastructure Integration: Testcontainers for PostgreSQL & RabbitMQ (17 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing)
 
 ---
 
@@ -88,5 +88,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Outbox Polling Processor (`OutboxProcessor`) & Background Worker (`OutboxPublisherBackgroundService`): Implemented non-blocking concurrent polling with `SELECT ... FOR UPDATE SKIP LOCKED` inside an explicit transaction, poison message retry isolation (`RetryCount < 5`), and Testcontainers concurrency/failure verification (95 tests passing).
-- **Next Planned Learning Step**: Phase 3 RabbitMQ Broker Integration: Connect `RabbitMQ.Client` with Publisher Confirms, Exchanges/Queues/DLQ topology, and `Testcontainers.RabbitMq` end-to-end verification.
+- **Immediate Completed Task**: RabbitMQ Broker Integration: Implemented `RabbitMqConnectionManager` (Singleton TCP connection), `RabbitMqOutboxMessagePublisher` (Scoped channel with Publisher Confirms), `RabbitMqTopology` (Topic Exchange + Dead-Letter Queue topology), and end-to-end Testcontainers PostgreSQL + RabbitMQ verification (97 tests passing).
+- **Next Planned Learning Step**: Phase 3 Idempotent Consumer (Inbox Pattern): Implement an asynchronous event consumer with deduplication table (`inbox_messages`) to guarantee safe processing under at-least-once delivery.

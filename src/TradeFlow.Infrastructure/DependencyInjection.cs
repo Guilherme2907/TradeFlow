@@ -10,6 +10,7 @@ using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Domain.Orders;
 using TradeFlow.Infrastructure.Messaging;
+using TradeFlow.Infrastructure.Messaging.RabbitMq;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
@@ -50,7 +51,16 @@ public static class DependencyInjection
         services.AddScoped<IInventoryReservationService, InventoryReservationServiceAdapter>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        services.AddScoped<IOutboxMessagePublisher, LoggingOutboxMessagePublisher>();
+        var rabbitMqConnectionString = configuration.GetConnectionString("RabbitMq");
+        if (!string.IsNullOrWhiteSpace(rabbitMqConnectionString))
+        {
+            services.AddRabbitMqMessaging(rabbitMqConnectionString);
+        }
+        else
+        {
+            services.AddScoped<IOutboxMessagePublisher, LoggingOutboxMessagePublisher>();
+        }
+
         services.AddScoped<OutboxProcessor>();
 
         var workerEnabled = !bool.TryParse(configuration["Outbox:BackgroundWorkerEnabled"], out var isEnabled) || isEnabled;
@@ -59,6 +69,15 @@ public static class DependencyInjection
             services.AddHostedService<OutboxPublisherBackgroundService>();
         }
 
+        return services;
+    }
+
+    public static IServiceCollection AddRabbitMqMessaging(
+        this IServiceCollection services,
+        string rabbitMqConnectionString)
+    {
+        services.AddSingleton<IRabbitMqConnectionManager>(_ => new RabbitMqConnectionManager(rabbitMqConnectionString));
+        services.AddScoped<IOutboxMessagePublisher, RabbitMqOutboxMessagePublisher>();
         return services;
     }
 

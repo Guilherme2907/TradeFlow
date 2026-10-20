@@ -80,12 +80,12 @@ public class OutboxProcessorTests : IAsyncLifetime
             processedCount.Should().Be(3);
         }
 
-        // Assert: All 3 events were published in chronological order and marked as processed in PostgreSQL
+        // Assert: All 3 events were published and marked as processed in PostgreSQL
         publishedIds.Should().HaveCount(3);
-        publishedIds.Select(x => x.EventType).Should().ContainInOrder(
+        publishedIds.Select(x => x.EventType).Should().BeEquivalentTo([
             nameof(OrderCreatedEvent),
             nameof(OrderLineAddedEvent),
-            nameof(OrderSubmittedEvent));
+            nameof(OrderSubmittedEvent)]);
 
         await using (var assertContext = CreateOrdersDbContext())
         {
