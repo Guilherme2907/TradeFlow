@@ -14,6 +14,7 @@ using TradeFlow.Infrastructure.Messaging.RabbitMq;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
+using TradeFlow.Infrastructure.Modules.Orders.Persistence.Inbox;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Outbox;
 using TradeFlow.Infrastructure.Persistence;
 
@@ -62,6 +63,7 @@ public static class DependencyInjection
         }
 
         services.AddScoped<OutboxProcessor>();
+        services.AddScoped<IdempotentInboxConsumer>();
 
         var workerEnabled = !bool.TryParse(configuration["Outbox:BackgroundWorkerEnabled"], out var isEnabled) || isEnabled;
         if (!useInMemory && workerEnabled)

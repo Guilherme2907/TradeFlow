@@ -10,6 +10,7 @@ using TradeFlow.Domain.Orders;
 using TradeFlow.Domain.Orders.Events;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
+using TradeFlow.Infrastructure.Modules.Orders.Persistence.Inbox;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Outbox;
 using Xunit;
 
@@ -191,5 +192,154 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         dlqDelivery.Should().NotBeNull("Rejected message with requeue: false must be routed to the Dead-Letter Queue");
         dlqDelivery!.BasicProperties.MessageId.Should().Be(messageId.ToString());
         Encoding.UTF8.GetString(dlqDelivery.Body.ToArray()).Should().Contain("test-dlq");
+    }
+
+    [Fact]
+    public async Task IdempotentInboxConsumer_WhenSameMessageIsDeliveredTwiceFromRabbitMq_ShouldExecuteSideEffectOnlyOnceAndAckBoth()
+    {
+        // Arrange: Simulate At-Least-Once duplicate delivery where the exact same MessageId is published twice to RabbitMQ
+        const string invoicingQueue = "invoicing.order-submitted";
+        const string consumerName = "InvoiceGenerationConsumer";
+
+        var connection = await _connectionManager.GetConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        await RabbitMqTopology.DeclareQueueWithDeadLetteringAsync(
+            channel,
+            queueName: invoicingQueue,
+            routingKeyPattern: "orders.OrderSubmittedEvent");
+
+        var duplicateMessageId = Guid.NewGuid();
+        await using (var publisher = new RabbitMqOutboxMessagePublisher(_connectionManager, NullLogger<RabbitMqOutboxMessagePublisher>.Instance))
+        {
+            // Publish #1 (original delivery)
+            await publisher.PublishAsync(
+                duplicateMessageId,
+                nameof(OrderSubmittedEvent),
+                "{\"orderId\":\"order-123\"}",
+                DateTimeOffset.UtcNow);
+
+            // Publish #2 (simulated duplicate redelivery after worker restart)
+            await publisher.PublishAsync(
+                duplicateMessageId,
+                nameof(OrderSubmittedEvent),
+                "{\"orderId\":\"order-123\"}",
+                DateTimeOffset.UtcNow);
+        }
+
+        var sideEffectExecutionCount = 0;
+
+        // Act 1: Consume first copy of the message
+        await using (var dbContext1 = CreateOrdersDbContext())
+        {
+            var consumer1 = new IdempotentInboxConsumer(dbContext1, NullLogger<IdempotentInboxConsumer>.Instance);
+            var firstResult = await consumer1.ConsumeNextFromQueueAsync(
+                channel,
+                invoicingQueue,
+                consumerName,
+                (_, _, _, _) =>
+                {
+                    sideEffectExecutionCount++;
+                    return Task.CompletedTask;
+                });
+
+            firstResult.Should().BeTrue("First delivery of MessageId must be executed");
+        }
+
+        // Act 2: Consume second (duplicate) copy of the message
+        await using (var dbContext2 = CreateOrdersDbContext())
+        {
+            var consumer2 = new IdempotentInboxConsumer(dbContext2, NullLogger<IdempotentInboxConsumer>.Instance);
+            var secondResult = await consumer2.ConsumeNextFromQueueAsync(
+                channel,
+                invoicingQueue,
+                consumerName,
+                (_, _, _, _) =>
+                {
+                    sideEffectExecutionCount++;
+                    return Task.CompletedTask;
+                });
+
+            secondResult.Should().BeFalse("Second delivery of the same MessageId for the same ConsumerName must be skipped via Inbox deduplication");
+        }
+
+        // Assert: Business side-effect ran ONLY ONCE, queue is completely drained (both ACKed),
+        // and a different consumer can still process the same MessageId independently!
+        sideEffectExecutionCount.Should().Be(1);
+
+        var remainingInQueue = await channel.BasicGetAsync(invoicingQueue, autoAck: true);
+        remainingInQueue.Should().BeNull("Both deliveries were ACKed and removed from the RabbitMQ queue");
+
+        await using (var verifyContext = CreateOrdersDbContext())
+        {
+            var inboxEntry = await verifyContext.InboxMessages
+                .SingleOrDefaultAsync(x => x.MessageId == duplicateMessageId && x.ConsumerName == consumerName);
+            inboxEntry.Should().NotBeNull();
+
+            // Verify composite key isolation: a different consumer name CAN process the same MessageId
+            var otherConsumer = new IdempotentInboxConsumer(verifyContext, NullLogger<IdempotentInboxConsumer>.Instance);
+            var otherConsumerExecuted = await otherConsumer.ExecuteIdempotentlyAsync(
+                duplicateMessageId,
+                consumerName: "LoyaltyPointsConsumer",
+                eventType: nameof(OrderSubmittedEvent),
+                _ => Task.CompletedTask);
+
+            otherConsumerExecuted.Should().BeTrue("Composite primary key (MessageId, ConsumerName) allows distinct consumers to process the same event");
+        }
+    }
+
+    [Fact]
+    public async Task IdempotentInboxConsumer_WhenHandlerThrowsException_ShouldRollbackInboxRecordAndRouteMessageToDlq()
+    {
+        // Arrange
+        const string failingQueue = "tax-reporting.order-submitted";
+        const string expectedDlqName = "tax-reporting.order-submitted.dlq";
+        const string consumerName = "TaxReportingConsumer";
+
+        var connection = await _connectionManager.GetConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        await RabbitMqTopology.DeclareQueueWithDeadLetteringAsync(
+            channel,
+            queueName: failingQueue,
+            routingKeyPattern: "orders.OrderSubmittedEvent");
+
+        var failingMessageId = Guid.NewGuid();
+        await using (var publisher = new RabbitMqOutboxMessagePublisher(_connectionManager, NullLogger<RabbitMqOutboxMessagePublisher>.Instance))
+        {
+            await publisher.PublishAsync(
+                failingMessageId,
+                nameof(OrderSubmittedEvent),
+                "{\"orderId\":\"tax-fail-order\"}",
+                DateTimeOffset.UtcNow);
+        }
+
+        // Act: Consumer handler throws an exception mid-processing
+        await using (var dbContext = CreateOrdersDbContext())
+        {
+            var consumer = new IdempotentInboxConsumer(dbContext, NullLogger<IdempotentInboxConsumer>.Instance);
+
+            var act = async () => await consumer.ConsumeNextFromQueueAsync(
+                channel,
+                failingQueue,
+                consumerName,
+                (_, _, _, _) => throw new InvalidOperationException("External Tax Authority API 503 Unavailable"));
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        // Assert 1: The inbox record MUST have been rolled back in PostgreSQL so the message can be reprocessed later
+        await using (var verifyContext = CreateOrdersDbContext())
+        {
+            var inboxExists = await verifyContext.InboxMessages
+                .AnyAsync(x => x.MessageId == failingMessageId && x.ConsumerName == consumerName);
+
+            inboxExists.Should().BeFalse("Failed handler transaction must roll back the INSERT into orders.inbox_messages");
+        }
+
+        // Assert 2: The message was NACKed (requeue: false) and landed in the Dead-Letter Queue
+        var dlqDelivery = await channel.BasicGetAsync(expectedDlqName, autoAck: true);
+        dlqDelivery.Should().NotBeNull();
+        dlqDelivery!.BasicProperties.MessageId.Should().Be(failingMessageId.ToString());
     }
 }
