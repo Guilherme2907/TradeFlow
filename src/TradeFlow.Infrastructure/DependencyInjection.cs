@@ -12,6 +12,7 @@ using TradeFlow.Domain.Orders;
 using TradeFlow.Infrastructure.Messaging;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
+using TradeFlow.Infrastructure.Modules.Orders.Consumers;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Inbox;
@@ -76,10 +77,21 @@ public static class DependencyInjection
 
     public static IServiceCollection AddRabbitMqMessaging(
         this IServiceCollection services,
-        string rabbitMqConnectionString)
+        string rabbitMqConnectionString,
+        bool enableConsumerBackgroundWorker = true)
     {
         services.AddSingleton<IRabbitMqConnectionManager>(_ => new RabbitMqConnectionManager(rabbitMqConnectionString));
         services.AddScoped<IOutboxMessagePublisher, RabbitMqOutboxMessagePublisher>();
+
+        services.AddScoped<IIntegrationEventConsumer, OrderSubmittedInvoiceConsumer>();
+        services.AddScoped<IIntegrationEventConsumer, OrderCancelledNotificationConsumer>();
+        services.AddScoped<IIntegrationEventConsumer, OrderLifecycleAuditConsumer>();
+
+        if (enableConsumerBackgroundWorker)
+        {
+            services.AddHostedService<RabbitMqConsumerBackgroundService>();
+        }
+
         return services;
     }
 

@@ -43,8 +43,8 @@ This document is the persistent registry of technical competencies, architectura
 | **Domain-Driven Design (Aggregates & Invariants)** | `Strong` | 2026-10-06 | Implemented `Order` and `InventoryItem` aggregates with encapsulated state, non-public setters, `Money` value object, immutable snapshots, and pure unit tests. |
 | **Modular Monolith Boundary Enforcement** | `Strong` | 2026-10-06 | Successfully defended PostgreSQL schema isolation (`orders.*` vs `inventory.*`) and explicit in-process contract facades (`IInventoryModule`), backed by 14 NetArchTest fitness tests. |
 | **Transactional Outbox Pattern** | `Strong` | 2026-10-18 | Articulated the Dual-Write problem, 2PC/XA pitfalls, `FOR UPDATE SKIP LOCKED` non-blocking multi-pod polling, and poison message isolation (`RetryCount < 5`) to prevent head-of-line blocking. Implemented `DomainEventsToOutboxMessagesInterceptor`, `OutboxProcessor`, and `OutboxPublisherBackgroundService` verified via concurrent Testcontainers (ADR-0011). |
-| **At-Least-Once Delivery & Idempotent Consumers** | `Good` | 2026-10-13 | Identified that at-least-once delivery causes duplicate messages and analyzed consumer deduplication via Inbox table pattern (unique message ID tracking) and semantic state idempotency (ADR-0011). |
-| **RabbitMQ Exchange/Queue Architecture & DLQs** | `Strong` | 2026-10-19 | Selected `Topic` exchange for flexible routing (`orders.OrderSubmittedEvent` vs `orders.*`), analyzed Singleton `IConnection` vs Scoped `IChannel` multiplexing, and verified Publisher Confirms + Dead-Letter Queue (`x-dead-letter-exchange`) with `Testcontainers.RabbitMq` (ADR-0011). |
+| **At-Least-Once Delivery & Idempotent Consumers** | `Strong` | 2026-10-21 | Articulated at-least-once delivery duplicates, analyzed why consumer deduplication requires an Inbox table (`inbox_messages` with composite key `message_id` + `consumer_name`), and verified push consumption with atomic `INSERT ... ON CONFLICT DO NOTHING` inside transactions (ADR-0011). |
+| **RabbitMQ Exchange/Queue Architecture & DLQs** | `Strong` | 2026-10-21 | Selected `Topic` exchange for flexible routing (`orders.OrderSubmittedEvent` vs `orders.*`), analyzed Singleton `IConnection` vs Scoped/Persistent `IChannel` multiplexing, `BasicQosAsync` backpressure, push consumers (`BasicConsumeAsync`), and verified Publisher Confirms + Dead-Letter Queue (`x-dead-letter-exchange`) with `Testcontainers.RabbitMq` (ADR-0011). |
 | **Apache Kafka Partitioning & Offset Management**| `Not Started` | — | Planned for Phase 4 |
 | **OAuth2 / OpenID Connect Token Lifecycle & SSO** | `Not Started` | — | Planned for Phase 5 |
 | **Distributed Caching, Stampede & Cache-Aside** | `Not Started` | — | Planned for Phase 7 |
@@ -68,18 +68,18 @@ Testing is a primary engineering axis. Each level is tracked independently to en
 | **3. API Testing** | `Strong` | Yes (Phase 1–2) | — | Emulator divergence vs production parity | RFC 7807 contracts, HTTP status code assertions, real PostgreSQL cross-context commits | 2026-10-07 |
 | **4. Contract Testing** | `Not Started` | No (Phase 3–4) | — | — | — | — |
 | **5. End-to-End (E2E) Testing** | `Not Started` | No (Phase 6) | — | — | — | — |
-| **6. Messaging Testing** | `Not Started` | No (Phase 3–4) | — | — | — | — |
-| **7. Resilience Testing** | `Not Started` | No (Phase 3, 7) | — | — | — | — |
+| **6. Messaging Testing** | `Strong` | Yes (Phase 3) | — | Flaky assertions caused by microsecond clock resolution | RabbitMQ Topic routing, Publisher Confirms, DLQ routing, Push Consumers, Inbox deduplication | 2026-10-21 |
+| **7. Resilience Testing** | `Good` | Yes (Phase 3) | — | Poison message simulation, DLQ routing | Outbox retries, consumer NACK without requeue, dead-letter routing | 2026-10-21 |
 | **8. Security Testing** | `Not Started` | No (Phase 5) | — | — | — | — |
 | **9. Performance Testing** | `Not Started` | No (Phase 7) | — | — | — | — |
 | **10. Architecture Testing** | `Strong` | Yes (Phase 2) | — | Multi-project explosion vs single-project modularity | NetArchTest layer rules, entity encapsulation, Anti-Backdoor rule, bounded context isolation | 2026-10-06 |
 
-*Active Testing Baseline (88 passing tests)*:
+*Active Testing Baseline (100 passing tests)*:
 - Unit/Domain: 41 tests (Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
 - Unit/Application: 17 tests (Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
 - Architecture: 17 tests (Layer dependencies, entity encapsulation, Anti-Backdoor rule, Module boundaries, infrastructure isolation, IModuleDbContext enforcement)
 - API Integration: 5 tests (HTTP contracts, RFC 7807 problem details, real PostgreSQL cross-context database commits)
-- Infrastructure Integration: 8 tests (Real PostgreSQL in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback)
+- Infrastructure Integration: 20 tests (Real PostgreSQL and RabbitMQ in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication)
 
 ---
 
@@ -124,6 +124,7 @@ Logs technical and testing questions asked during sessions to gauge retention, r
 | 2026-10-07 | Aggregate Root Temporal Encapsulation & Testcontainers Parity over In-Memory Emulators | Arch / Testing | `Correct` | Correctly identified that temporal audit properties (`CreatedAt`, `UpdatedAt`) belong in `AggregateRoot` to enforce uniform consistency boundaries, and challenged SQLite in-memory emulators to ensure 100% production database fidelity in API integration tests. |
 | 2026-10-07 | Pessimistic Locking vs. OCC Retry Storms & Deterministic Deadlock Prevention | Arch / Concurrency | `Correct` | Independently analyzed why OCC creates retry storms on hot items, rejected atomic SQL due to DDD leakage, selected pessimistic row locking (`SELECT FOR UPDATE`), and identified deadlock risks solved by deterministic sorting. |
 | 2026-10-13 | Multi-context UnitOfWork scalability & why transparent ORM retries are dangerous | Arch / Persistence | `Correct` | Challenged hardcoded DbContext parameters in `UnitOfWork` as unscalable and independently reasoned that transparent ORM retries are risky for critical production transactions compared to fail-fast boundaries with edge idempotency. |
+| 2026-10-21 | RabbitMQ Push Consumers (`BasicConsumeAsync`), Backpressure (`BasicQosAsync`), and Channel Lifecycles | Arch / Messaging | `Correct` | Articulated why consumer channels must stay open for push delivery while publisher channels are short-lived, and defended `BasicQosAsync(prefetchCount: 10)` backpressure to prevent OOM killed pods and unfair dispatch. |
 
 ---
 

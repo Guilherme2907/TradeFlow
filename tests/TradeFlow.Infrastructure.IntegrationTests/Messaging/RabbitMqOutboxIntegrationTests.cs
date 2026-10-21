@@ -2,6 +2,9 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
@@ -9,6 +12,7 @@ using TradeFlow.Domain.Common;
 using TradeFlow.Domain.Orders;
 using TradeFlow.Domain.Orders.Events;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
+using TradeFlow.Infrastructure.Modules.Orders.Consumers;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Inbox;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Outbox;
@@ -341,5 +345,105 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         var dlqDelivery = await channel.BasicGetAsync(expectedDlqName, autoAck: true);
         dlqDelivery.Should().NotBeNull();
         dlqDelivery!.BasicProperties.MessageId.Should().Be(failingMessageId.ToString());
+    }
+
+    [Fact]
+    public async Task RabbitMqConsumerBackgroundService_WhenOrderIsSubmittedAndCancelled_ShouldConsumePushEventsAndRecordInboxEntries()
+    {
+        // Arrange: Wire up full DI container with PostgreSQL + RabbitMQ + all 3 Order Event Consumers + Push BackgroundService
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNpgsqlModuleDbContexts(_postgresContainer.GetConnectionString());
+        services.AddRabbitMqMessaging(_rabbitMqContainer.GetConnectionString(), enableConsumerBackgroundWorker: true);
+        services.AddScoped<OutboxProcessor>();
+        services.AddScoped<IdempotentInboxConsumer>();
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var consumerWorker = serviceProvider.GetServices<IHostedService>()
+            .OfType<RabbitMqConsumerBackgroundService>()
+            .Single();
+
+        // Start the push-based consumer BackgroundService
+        await consumerWorker.StartAsync(CancellationToken.None);
+
+        try
+        {
+            // Give the background service a brief moment to declare topology & start BasicConsume
+            await Task.Delay(250);
+
+            // Act: Create, add line, submit, and cancel an Order (raises 4 domain events)
+            Guid[] raisedEventIds;
+            await using (var scope = serviceProvider.CreateAsyncScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
+
+                var order = Order.Create(CustomerId.New(), "USD");
+                order.AddLine(ProductId.New(), "SKU-BOILER-01", "Steam Boiler", Money.Create(2500m, "USD"), 1);
+                order.Submit();
+                order.Cancel("Customer requested cancellation before dispatch");
+
+                raisedEventIds = order.DomainEvents.Select(e => e.EventId).ToArray();
+                raisedEventIds.Should().HaveCount(4);
+
+                await dbContext.Orders.AddAsync(order);
+                await dbContext.SaveChangesAsync();
+            }
+
+            // Publish the 4 outbox events to RabbitMQ
+            await using (var publishScope = serviceProvider.CreateAsyncScope())
+            {
+                var processor = publishScope.ServiceProvider.GetRequiredService<OutboxProcessor>();
+                var published = await processor.ProcessBatchAsync();
+                published.Should().Be(4);
+            }
+
+            // Wait for RabbitMqConsumerBackgroundService to push-consume all 6 deliveries:
+            // - 1 for OrderSubmittedInvoiceConsumer (orders.OrderSubmittedEvent)
+            // - 1 for OrderCancelledNotificationConsumer (orders.OrderCancelledEvent)
+            // - 4 for OrderLifecycleAuditConsumer (orders.* wildcard)
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            List<InboxMessage> matchedInboxEntries = [];
+
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                await using var checkContext = CreateOrdersDbContext();
+                matchedInboxEntries = await checkContext.InboxMessages
+                    .Where(m => raisedEventIds.Contains(m.MessageId))
+                    .ToListAsync();
+
+                if (matchedInboxEntries.Count >= 6)
+                {
+                    break;
+                }
+
+                await Task.Delay(100);
+            }
+
+            // Assert: All 3 registered consumers received and processed their subscribed events via Push
+            matchedInboxEntries.Should().HaveCount(6);
+
+            matchedInboxEntries
+                .Where(m => m.ConsumerName == nameof(OrderSubmittedInvoiceConsumer))
+                .Select(m => m.EventType)
+                .Should().ContainSingle().Which.Should().Be(nameof(OrderSubmittedEvent));
+
+            matchedInboxEntries
+                .Where(m => m.ConsumerName == nameof(OrderCancelledNotificationConsumer))
+                .Select(m => m.EventType)
+                .Should().ContainSingle().Which.Should().Be(nameof(OrderCancelledEvent));
+
+            matchedInboxEntries
+                .Where(m => m.ConsumerName == nameof(OrderLifecycleAuditConsumer))
+                .Select(m => m.EventType)
+                .Should().BeEquivalentTo([
+                    nameof(OrderCreatedEvent),
+                    nameof(OrderLineAddedEvent),
+                    nameof(OrderSubmittedEvent),
+                    nameof(OrderCancelledEvent)]);
+        }
+        finally
+        {
+            await consumerWorker.StopAsync(CancellationToken.None);
+        }
     }
 }
