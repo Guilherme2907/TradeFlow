@@ -8,17 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 3: Asynchronous Messaging & Transactional Outbox (RabbitMQ) - COMPLETED` |
-| **Application Status** | Phase 1, 2 & 3 Complete; Local Environment Setup & Phase 4 Preparation Active |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ Push Consumers + Inbox Pattern) |
+| **Current Stage** | `PHASE 4: High-Throughput Event Streaming (Apache Kafka)` |
+| **Application Status** | Phase 1, 2 & 3 Complete; Phase 4 Kickoff (Event Streaming vs. Queue Broker) |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ + Docker Dev Env) |
 | **Primary Codebase** | .NET 10, C# |
 | **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (20) — 100 passing tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-10-21 |
+| **Last Updated** | 2026-10-22 |
 
 > [!NOTE]
-> Phase 3 (Asynchronous Messaging & Transactional Outbox with RabbitMQ) is complete. Domain events (`IDomainEvent`) raised by aggregates (`IHasDomainEvents`) are automatically captured via EF Core's `DomainEventsToOutboxMessagesInterceptor` and atomically persisted to `orders.outbox_messages` (`jsonb` with partial index `WHERE processed_at IS NULL AND retry_count < 5`). `OutboxProcessor` and `OutboxPublisherBackgroundService` poll unprocessed batches inside an explicit transaction using `SELECT ... FOR UPDATE SKIP LOCKED` and dispatch events through `RabbitMqOutboxMessagePublisher` over a Singleton TCP `IConnection` (`RabbitMqConnectionManager`) and Scoped `IChannel` with Publisher Confirms (`Basic.Ack`) to a durable Topic Exchange (`tradeflow.events`) with Dead-Letter Exchange (`tradeflow.events.dlx`) topology.
-> On the receiving side, push-based consumers (`RabbitMqConsumerBackgroundService` applying `BasicQosAsync(prefetchCount: 10)` backpressure) dispatch deliveries to event-specific consumers (`OrderSubmittedInvoiceConsumer`, `OrderCancelledNotificationConsumer`, `OrderLifecycleAuditConsumer`) deduplicated atomically through `IdempotentInboxConsumer` into `orders.inbox_messages` (ADR-0011). All 100 tests pass against real PostgreSQL and RabbitMQ in Docker via Testcontainers.
+> Phase 4 (High-Throughput Event Streaming with Apache Kafka) is active. The system is expanding from point-to-point asynchronous task routing (RabbitMQ) to high-volume distributed event streaming. In this phase, we analyze the architectural trade-offs between traditional queue brokers and append-only commit logs, introduce Apache Kafka for market telemetry and trade audit streams, implement partition-key routing for strict order preservation, and test consumer rebalancing and schema evolution.
 
 ---
 
@@ -93,5 +92,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 3 Complete (Transactional Outbox + Polling Publisher + RabbitMQ Topic Exchange + Push Consumers + Idempotent Inbox Pattern). Verified with 100/100 tests.
-- **Next Planned Learning Step**: Setup local multi-container development environment (`docker-compose.yml`), seed development database, and transition to **Phase 4: High-Throughput Event Streaming (Apache Kafka)**.
+- **Immediate Completed Task**: Local Multi-Container Development Environment & Database Bootstrap (Docker Compose with PostgreSQL 16, RabbitMQ 4, pgAdmin 4, automated schema creation, seed stock, and Scalar UI). Commit `a419341`.
+- **Current Active Learning Step**: Phase 4 Kickoff: High-Throughput Event Streaming with Apache Kafka — Architectural comparison (RabbitMQ vs. Kafka), stream ingestion, partition ordering, and consumer group mechanics.
