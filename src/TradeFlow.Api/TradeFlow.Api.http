@@ -1,6 +1,53 @@
-@TradeFlow.Api_HostAddress = http://localhost:5022
+@baseUrl = http://localhost:5022
+@productId1 = 11111111-1111-1111-1111-111111111111
+@productId2 = 22222222-2222-2222-2222-222222222222
 
-GET {{TradeFlow.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### =========================================================================
+### 1. Create a New B2B Draft Order
+### =========================================================================
+# @name createOrder
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
 
-###
+{
+  "customerId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "currency": "USD",
+  "minimumOrderValue": 100.00
+}
+
+### Read generated Order ID from above response
+@orderId = {{createOrder.response.body.$}}
+
+### =========================================================================
+### 2. Add Order Line (using pre-seeded SKU-STEEL-001)
+### =========================================================================
+POST {{baseUrl}}/api/orders/{{orderId}}/lines
+Content-Type: application/json
+
+{
+  "productId": "{{productId1}}",
+  "sku": "SKU-STEEL-001",
+  "productName": "Industrial Steel Sheets",
+  "unitPrice": 250.00,
+  "quantity": 2
+}
+
+### =========================================================================
+### 3. Add Second Order Line (using pre-seeded SKU-COPPER-002)
+### =========================================================================
+POST {{baseUrl}}/api/orders/{{orderId}}/lines
+Content-Type: application/json
+
+{
+  "productId": "{{productId2}}",
+  "sku": "SKU-COPPER-002",
+  "productName": "Refined Copper Rods",
+  "unitPrice": 120.00,
+  "quantity": 3
+}
+
+### =========================================================================
+### 4. Submit Order (Triggers Outbox -> RabbitMQ -> Push Consumers -> Inbox)
+### =========================================================================
+POST {{baseUrl}}/api/orders/{{orderId}}/submit
+Content-Type: application/json

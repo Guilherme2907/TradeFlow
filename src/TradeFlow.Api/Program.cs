@@ -1,3 +1,5 @@
+using Scalar.AspNetCore;
+using TradeFlow.Api.Common;
 using TradeFlow.Api.Endpoints;
 using TradeFlow.Application;
 using TradeFlow.Infrastructure;
@@ -21,6 +23,8 @@ app.UseStatusCodePages();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
+    await app.MigrateAndSeedDevelopmentDatabaseAsync();
 }
 
 app.UseHttpsRedirection();
@@ -31,3 +35,4 @@ app.MapOrderEndpoints();
 app.Run();
 
 // Required for WebApplicationFactory<Program> in API integration tests
+public partial class Program { }
