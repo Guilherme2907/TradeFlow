@@ -8,16 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 4: High-Throughput Event Streaming (Apache Kafka)` |
-| **Application Status** | Phase 1, 2 & 3 Complete; Phase 4 Kickoff (Event Streaming vs. Queue Broker) |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ + Docker Dev Env) |
+| **Current Stage** | `PHASE 4: High-Throughput Event Streaming (Apache Kafka) [COMPLETED]` |
+| **Application Status** | Phase 1, 2, 3 & 4 Complete; Hybrid Messaging (RabbitMQ + Kafka KRaft) Fully Verified |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ + Apache Kafka KRaft) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (20) — 100 passing tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (23) — 103 passing tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-10-22 |
+| **Last Updated** | 2026-10-29 |
 
 > [!NOTE]
-> Phase 4 (High-Throughput Event Streaming with Apache Kafka) is active. The system is expanding from point-to-point asynchronous task routing (RabbitMQ) to high-volume distributed event streaming. In this phase, we analyze the architectural trade-offs between traditional queue brokers and append-only commit logs, introduce Apache Kafka for market telemetry and trade audit streams, implement partition-key routing for strict order preservation, and test consumer rebalancing and schema evolution.
+> Phase 4 (High-Throughput Event Streaming with Apache Kafka) is completed. TradeFlow operates with a symmetric dual-broker architecture: RabbitMQ handles discrete command/workflow tasks via Topic Exchange, while Kafka handles high-throughput ordered event streams (`KafkaTopology.TradesTopic`) partitioned deterministically by `ProductId` (`Acks.All`, `EnableIdempotence = true`). Outbox routing is governed centrally via `KafkaTopology.TryGetOutboxRoute` and `RabbitMqTopology.TryGetRoutingKey` without ad-hoc mapper classes. The consumer background service isolates poison pills into `tradeflow.market.trades.dlq` after transient in-memory retries, protecting partitions from Head-of-Line Blocking (ADR-0012). Memory is protected via bounded sliding windows (`MarketTradeAnalyticsHandler`). All 103 automated tests passing against real PostgreSQL, RabbitMQ, and Kafka containers.
 
 ---
 
@@ -48,18 +48,20 @@ This document captures the real-time architectural baseline, active modules, tec
   - RabbitMQ broker integration (`RabbitMQ.Client` v7.2.2) via `RabbitMqConnectionManager` (Singleton TCP connection), `RabbitMqOutboxMessagePublisher` (Scoped channel with Publisher Confirms), and `RabbitMqTopology` (`tradeflow.events` Topic Exchange + Dead-Letter Exchange `tradeflow.events.dlx`).
   - Push-based consumer workers (`RabbitMqConsumerBackgroundService` with `BasicQosAsync(prefetchCount: 10)` backpressure) routing events to `OrderSubmittedInvoiceConsumer`, `OrderCancelledNotificationConsumer`, and `OrderLifecycleAuditConsumer`.
   - Idempotent consumer deduplication via `IdempotentInboxConsumer` into `orders.inbox_messages` (`INSERT ... ON CONFLICT DO NOTHING`).
+- High-throughput event streaming (Phase 4 Active):
+  - Apache Kafka integration (`Confluent.Kafka` v2.16.0) via `KafkaTopology` (`tradeflow.market.trades.v1` with 3 partitions + `tradeflow.market.trades.dlq`), `KafkaTradeStreamProducer` (Singleton thread-safe producer with `Acks.All`, `EnableIdempotence = true`, and `ProductId` Partition Key), `KafkaTradeStreamConsumerBackgroundService` (manual offset commit after processing + non-blocking Poison Pill routing to DLT), and `MarketTradeAnalyticsHandler` (ADR-0012).
 
 ### 2.5 Active Infrastructure & DevOps
-- Docker Desktop installed for Testcontainers PostgreSQL and RabbitMQ integration tests (`[Trait("Category", "RequiresDocker")]`).
-- Local multi-container development environment via `docker-compose.yml` (PostgreSQL 16, RabbitMQ 4 with Management UI).
+- Docker Desktop installed for Testcontainers PostgreSQL, RabbitMQ, and Kafka integration tests (`[Trait("Category", "RequiresDocker")]`).
+- Local multi-container development environment via `docker-compose.yml` (PostgreSQL 16, RabbitMQ 4 with Management UI, pgAdmin 4, Apache Kafka 3.8 KRaft, Kafka UI).
 
 ### 2.6 Active Testing Infrastructure
-- Active (100 automated tests):
+- Active (103 automated tests):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
   - Unit/Application: NSubstitute, FluentAssertions (17 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
   - Architecture: NetArchTest.Rules (17 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation, infrastructure isolation, IModuleDbContext enforcement)
   - API Contract & E2E: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL (5 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits)
-  - Infrastructure Integration: Testcontainers for PostgreSQL & RabbitMQ (20 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication)
+  - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ & Kafka (23 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation)
 
 ---
 
@@ -78,6 +80,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0009](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0009-pessimistic-locking-and-deterministic-ordering-for-inventory.md) | Pessimistic Row Locking and Deterministic Ordering for Inventory Contention | Accepted | 2026-10-07 |
 | [ADR-0010](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0010-generic-unit-of-work-shared-connection-and-retry-policy.md) | Generic Unit of Work over Shared Connection and Fail-Fast Transaction Boundaries | Accepted | 2026-10-13 |
 | [ADR-0011](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0011-transactional-outbox-pattern-and-idempotent-consumers.md) | Transactional Outbox Pattern with Polling Publisher (SKIP LOCKED) and Idempotent Consumers | Accepted | 2026-10-13 |
+| [ADR-0012](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0012-high-throughput-event-streaming-apache-kafka.md) | High-Throughput Event Streaming with Apache Kafka (KRaft), Partition Key Ordering, and Dead-Letter Topics | Accepted | 2026-10-28 |
 
 ---
 
@@ -92,5 +95,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Local Multi-Container Development Environment & Database Bootstrap (Docker Compose with PostgreSQL 16, RabbitMQ 4, pgAdmin 4, automated schema creation, seed stock, and Scalar UI). Commit `a419341`.
-- **Current Active Learning Step**: Phase 4 Kickoff: High-Throughput Event Streaming with Apache Kafka — Architectural comparison (RabbitMQ vs. Kafka), stream ingestion, partition ordering, and consumer group mechanics.
+- **Immediate Completed Task**: Phase 4 Core Kafka Event Streaming (`KafkaTopology`, `KafkaTradeStreamProducer`, `KafkaTradeStreamConsumerBackgroundService`, `MarketTradeAnalyticsHandler`, `ADR-0012`, and `KafkaTradeStreamIntegrationTests` with `Testcontainers.Kafka`). 103/103 tests passing.
+- **Next Planned Learning Step**: Consumer Group Rebalancing & Schema Evolution / Contract Compatibility in Kafka, or transition to **Phase 5: Identity, Security & Single Sign-On (OAuth2 / OIDC)**.

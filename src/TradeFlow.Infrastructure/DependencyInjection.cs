@@ -9,7 +9,9 @@ using TradeFlow.Application.Inventory.Services;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Domain.Orders;
+using Microsoft.Extensions.Logging;
 using TradeFlow.Infrastructure.Messaging;
+using TradeFlow.Infrastructure.Messaging.Kafka;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Consumers;
@@ -54,11 +56,33 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         var rabbitMqConnectionString = configuration.GetConnectionString("RabbitMq");
-        if (!string.IsNullOrWhiteSpace(rabbitMqConnectionString))
+        var hasRabbitMq = !string.IsNullOrWhiteSpace(rabbitMqConnectionString);
+        if (hasRabbitMq)
         {
-            services.AddRabbitMqMessaging(rabbitMqConnectionString);
+            services.AddRabbitMqMessaging(rabbitMqConnectionString!);
         }
-        else
+
+        var kafkaBootstrapServers = configuration.GetConnectionString("Kafka");
+        var hasKafka = !string.IsNullOrWhiteSpace(kafkaBootstrapServers);
+        if (hasKafka)
+        {
+            services.AddKafkaStreaming(kafkaBootstrapServers!);
+        }
+
+        if (hasRabbitMq && hasKafka)
+        {
+            services.AddScoped<IOutboxMessagePublisher>(sp =>
+                new RoutedOutboxMessagePublisher(
+                [
+                    sp.GetRequiredService<RabbitMqOutboxMessagePublisher>(),
+                    sp.GetRequiredService<KafkaOutboxMessagePublisher>()
+                ]));
+        }
+        else if (hasKafka)
+        {
+            services.AddScoped<IOutboxMessagePublisher>(sp => sp.GetRequiredService<KafkaOutboxMessagePublisher>());
+        }
+        else if (!hasRabbitMq)
         {
             services.AddScoped<IOutboxMessagePublisher, LoggingOutboxMessagePublisher>();
         }
@@ -81,7 +105,8 @@ public static class DependencyInjection
         bool enableConsumerBackgroundWorker = true)
     {
         services.AddSingleton<IRabbitMqConnectionManager>(_ => new RabbitMqConnectionManager(rabbitMqConnectionString));
-        services.AddScoped<IOutboxMessagePublisher, RabbitMqOutboxMessagePublisher>();
+        services.AddScoped<RabbitMqOutboxMessagePublisher>();
+        services.AddScoped<IOutboxMessagePublisher>(sp => sp.GetRequiredService<RabbitMqOutboxMessagePublisher>());
 
         services.AddScoped<IIntegrationEventConsumer, OrderSubmittedInvoiceConsumer>();
         services.AddScoped<IIntegrationEventConsumer, OrderCancelledNotificationConsumer>();
@@ -90,6 +115,36 @@ public static class DependencyInjection
         if (enableConsumerBackgroundWorker)
         {
             services.AddHostedService<RabbitMqConsumerBackgroundService>();
+        }
+
+        return services;
+    }
+
+    public static IServiceCollection AddKafkaStreaming(
+        this IServiceCollection services,
+        string kafkaBootstrapServers,
+        bool enableConsumerBackgroundWorker = true,
+        string consumerGroupId = KafkaTopology.DefaultConsumerGroup)
+    {
+        services.AddSingleton<MarketTradeAnalyticsHandler>();
+        services.AddScoped<IMarketTradeStreamHandler>(sp => sp.GetRequiredService<MarketTradeAnalyticsHandler>());
+
+        services.AddSingleton<IKafkaTradeStreamProducer>(sp =>
+            new KafkaTradeStreamProducer(
+                kafkaBootstrapServers,
+                sp.GetRequiredService<ILogger<KafkaTradeStreamProducer>>()));
+
+        services.AddScoped<KafkaOutboxMessagePublisher>();
+
+        if (enableConsumerBackgroundWorker)
+        {
+            services.AddHostedService(sp =>
+                new KafkaTradeStreamConsumerBackgroundService(
+                    kafkaBootstrapServers,
+                    sp.GetRequiredService<IServiceScopeFactory>(),
+                    sp.GetRequiredService<IKafkaTradeStreamProducer>(),
+                    sp.GetRequiredService<ILogger<KafkaTradeStreamConsumerBackgroundService>>(),
+                    consumerGroupId));
         }
 
         return services;

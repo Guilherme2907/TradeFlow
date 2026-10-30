@@ -32,8 +32,12 @@ public sealed class RabbitMqOutboxMessagePublisher : IOutboxMessagePublisher, IA
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        if (!RabbitMqTopology.TryGetRoutingKey(eventType, out var routingKey))
+        {
+            return;
+        }
+
         var channel = await GetOrCreateConfirmedChannelAsync(cancellationToken);
-        var routingKey = RabbitMqTopology.GetOrdersRoutingKey(eventType);
         var body = Encoding.UTF8.GetBytes(payload);
 
         var properties = new BasicProperties

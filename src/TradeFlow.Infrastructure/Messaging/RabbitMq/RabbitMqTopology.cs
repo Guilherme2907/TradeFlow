@@ -1,4 +1,5 @@
 using RabbitMQ.Client;
+using TradeFlow.Domain.Orders.Events;
 
 namespace TradeFlow.Infrastructure.Messaging.RabbitMq;
 
@@ -9,6 +10,25 @@ public static class RabbitMqTopology
 {
     public const string EventsExchangeName = "tradeflow.events";
     public const string DeadLetterExchangeName = "tradeflow.events.dlx";
+
+    /// <summary>
+    /// Resolves the RabbitMQ Topic Exchange routing key for an Outbox event.
+    /// Returns <c>false</c> if the event is not destined for RabbitMQ (e.g., Kafka-only high-frequency streams).
+    /// </summary>
+    public static bool TryGetRoutingKey(string eventType, out string routingKey)
+    {
+        routingKey = eventType switch
+        {
+            nameof(OrderCreatedEvent) => $"orders.{nameof(OrderCreatedEvent)}",
+            nameof(OrderLineAddedEvent) => $"orders.{nameof(OrderLineAddedEvent)}",
+            nameof(OrderSubmittedEvent) => $"orders.{nameof(OrderSubmittedEvent)}",
+            nameof(OrderApprovedEvent) => $"orders.{nameof(OrderApprovedEvent)}",
+            nameof(OrderCancelledEvent) => $"orders.{nameof(OrderCancelledEvent)}",
+            _ => string.Empty
+        };
+
+        return !string.IsNullOrEmpty(routingKey);
+    }
 
     public static string GetOrdersRoutingKey(string eventType) => $"orders.{eventType}";
 

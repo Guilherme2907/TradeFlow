@@ -35,6 +35,10 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseSetting("ConnectionStrings:RabbitMq", string.Empty);
+        builder.UseSetting("ConnectionStrings:Kafka", string.Empty);
+        builder.UseSetting("Outbox:BackgroundWorkerEnabled", "false");
+
         builder.ConfigureServices(services =>
         {
             var descriptors = services.Where(d =>
