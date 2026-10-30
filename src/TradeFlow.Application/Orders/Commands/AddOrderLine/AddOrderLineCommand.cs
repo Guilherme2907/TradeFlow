@@ -1,10 +1,10 @@
 using FluentValidation;
 using MediatR;
 using TradeFlow.Application.Common.Models;
+using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Common;
 using TradeFlow.Domain.Orders;
-using TradeFlow.Domain.Orders.Exceptions;
 
 namespace TradeFlow.Application.Orders.Commands.AddOrderLine;
 
@@ -33,11 +33,16 @@ public sealed class AddOrderLineCommandHandler : IRequestHandler<AddOrderLineCom
 {
     private readonly IOrderRepository _orderRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUserContext _currentUser;
 
-    public AddOrderLineCommandHandler(IOrderRepository orderRepository, IUnitOfWork unitOfWork)
+    public AddOrderLineCommandHandler(
+        IOrderRepository orderRepository,
+        IUnitOfWork unitOfWork,
+        ICurrentUserContext currentUser)
     {
         _orderRepository = orderRepository;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<Guid>> Handle(AddOrderLineCommand request, CancellationToken cancellationToken)
@@ -46,6 +51,15 @@ public sealed class AddOrderLineCommandHandler : IRequestHandler<AddOrderLineCom
         if (order is null)
         {
             return Result.Failure<Guid>(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
+        }
+
+        // ADR-0013: Prevent BOLA/IDOR — callers may only modify orders belonging to their own CustomerId tenant
+        if (!_currentUser.IsInRole(TradeFlowRoles.Admin) &&
+            (_currentUser.CustomerId is null || order.CustomerId.Value != _currentUser.CustomerId.Value))
+        {
+            return Result.Failure<Guid>(Error.Forbidden(
+                "ORDER_TENANT_FORBIDDEN",
+                "You do not have permission to modify an order belonging to another B2B customer tenant."));
         }
 
         var unitPrice = Money.Create(request.UnitPrice, order.Currency);

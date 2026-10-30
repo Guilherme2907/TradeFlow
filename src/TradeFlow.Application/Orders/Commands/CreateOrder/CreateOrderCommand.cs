@@ -1,13 +1,18 @@
 using FluentValidation;
 using MediatR;
 using TradeFlow.Application.Common.Models;
+using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Orders;
 
 namespace TradeFlow.Application.Orders.Commands.CreateOrder;
 
+/// <summary>
+/// Creates a new draft B2B purchase order.
+/// ADR-0013: <c>CustomerId</c> is intentionally excluded from the command payload and resolved exclusively
+/// from <see cref="ICurrentUserContext.CustomerId"/> (signed JWT claim) to eliminate BOLA/IDOR spoofing.
+/// </summary>
 public sealed record CreateOrderCommand(
-    Guid CustomerId,
     string Currency,
     decimal? MinimumOrderValue = null) : IRequest<Result<Guid>>;
 
@@ -15,10 +20,6 @@ public sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrderC
 {
     public CreateOrderCommandValidator()
     {
-        RuleFor(x => x.CustomerId)
-            .NotEmpty()
-            .WithMessage("CustomerId is required.");
-
         RuleFor(x => x.Currency)
             .NotEmpty()
             .Length(3)
@@ -35,16 +36,28 @@ public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderComma
 {
     private readonly IOrderRepository _orderRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUserContext _currentUser;
 
-    public CreateOrderCommandHandler(IOrderRepository orderRepository, IUnitOfWork unitOfWork)
+    public CreateOrderCommandHandler(
+        IOrderRepository orderRepository,
+        IUnitOfWork unitOfWork,
+        ICurrentUserContext currentUser)
     {
         _orderRepository = orderRepository;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<Result<Guid>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
     {
-        var customerId = new CustomerId(request.CustomerId);
+        if (!_currentUser.IsAuthenticated || _currentUser.CustomerId is null || _currentUser.CustomerId.Value == Guid.Empty)
+        {
+            return Result.Failure<Guid>(Error.Forbidden(
+                "CUSTOMER_TENANT_REQUIRED",
+                "The authenticated user does not have a valid B2B 'customer_id' tenant claim."));
+        }
+
+        var customerId = new CustomerId(_currentUser.CustomerId.Value);
         Money? minimumOrderValue = request.MinimumOrderValue.HasValue
             ? Money.Create(request.MinimumOrderValue.Value, request.Currency)
             : null;

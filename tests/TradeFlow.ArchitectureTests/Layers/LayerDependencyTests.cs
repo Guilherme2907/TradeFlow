@@ -79,4 +79,19 @@ public class LayerDependencyTests
         result.IsSuccessful.Should().BeTrue(
             $"API Endpoints must not directly reference Infrastructure types. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
     }
+
+    [Fact]
+    public void ApplicationLayer_ShouldNotHaveDependencyOn_AspNetCoreOrClaimsPrincipal()
+    {
+        // ADR-0013: Application layer must use ICurrentUserContext and never couple to HttpContext or ClaimsPrincipal
+        var result = Types.InAssembly(ApplicationAssembly)
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                "Microsoft.AspNetCore",
+                "System.Security.Claims")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Application layer must not depend on ASP.NET Core or System.Security.Claims. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
 }

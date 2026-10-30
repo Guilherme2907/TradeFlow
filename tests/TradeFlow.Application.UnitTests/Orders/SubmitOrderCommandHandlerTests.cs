@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using TradeFlow.Application.Common.Models;
+using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Commands.SubmitOrder;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Common;
@@ -15,6 +16,7 @@ public class SubmitOrderCommandHandlerTests
     private readonly IOrderRepository _orderRepository = Substitute.For<IOrderRepository>();
     private readonly IInventoryReservationService _inventoryService = Substitute.For<IInventoryReservationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly ICurrentUserContext _currentUser = Substitute.For<ICurrentUserContext>();
     private readonly SubmitOrderCommandHandler _handler;
 
     public SubmitOrderCommandHandlerTests()
@@ -22,7 +24,7 @@ public class SubmitOrderCommandHandlerTests
         _unitOfWork.ExecuteInTransactionAsync(Arg.Any<Func<Task<Result>>>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => callInfo.Arg<Func<Task<Result>>>()());
 
-        _handler = new SubmitOrderCommandHandler(_orderRepository, _inventoryService, _unitOfWork);
+        _handler = new SubmitOrderCommandHandler(_orderRepository, _inventoryService, _unitOfWork, _currentUser);
     }
 
     [Fact]
@@ -45,10 +47,47 @@ public class SubmitOrderCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WhenOrderBelongsToDifferentTenant_ShouldReturnForbiddenAndNotReserveStock()
+    {
+        // Arrange
+        var ownerTenant = CustomerId.New();
+        var attackerTenant = CustomerId.New();
+
+        _currentUser.IsAuthenticated.Returns(true);
+        _currentUser.CustomerId.Returns(attackerTenant.Value);
+        _currentUser.IsInRole(TradeFlowRoles.Admin).Returns(false);
+
+        var order = Order.Create(ownerTenant, "USD");
+        order.AddLine(ProductId.New(), "SKU-PUMP", "Pump", Money.Create(100m, "USD"), quantity: 5);
+
+        _orderRepository.GetByIdAsync(Arg.Is<OrderId>(id => id.Value == order.Id.Value), Arg.Any<CancellationToken>())
+            .Returns(order);
+
+        var command = new SubmitOrderCommand(order.Id.Value);
+
+        // Act
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsFailure.Should().BeTrue();
+        result.Error.Type.Should().Be(ErrorType.Forbidden);
+        result.Error.Code.Should().Be("ORDER_TENANT_FORBIDDEN");
+
+        await _inventoryService.DidNotReceive().ReserveStockAsync(
+            Arg.Any<OrderId>(),
+            Arg.Any<IReadOnlyCollection<ReservationItem>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WhenOrderHasNoLines_ShouldThrowOrderInvariantExceptionAndNotCallInventory()
     {
         // Arrange
-        var order = Order.Create(CustomerId.New(), "USD");
+        var customerId = CustomerId.New();
+        _currentUser.IsAuthenticated.Returns(true);
+        _currentUser.CustomerId.Returns(customerId.Value);
+
+        var order = Order.Create(customerId, "USD");
         _orderRepository.GetByIdAsync(Arg.Is<OrderId>(id => id.Value == order.Id.Value), Arg.Any<CancellationToken>())
             .Returns(order);
 
@@ -71,7 +110,11 @@ public class SubmitOrderCommandHandlerTests
     public async Task Handle_WhenInventoryReservationFails_ShouldReturnFailureAndNotCommitOrder()
     {
         // Arrange
-        var order = Order.Create(CustomerId.New(), "USD");
+        var customerId = CustomerId.New();
+        _currentUser.IsAuthenticated.Returns(true);
+        _currentUser.CustomerId.Returns(customerId.Value);
+
+        var order = Order.Create(customerId, "USD");
         order.AddLine(ProductId.New(), "SKU-PUMP", "Pump", Money.Create(100m, "USD"), quantity: 5);
 
         _orderRepository.GetByIdAsync(Arg.Is<OrderId>(id => id.Value == order.Id.Value), Arg.Any<CancellationToken>())
@@ -101,7 +144,11 @@ public class SubmitOrderCommandHandlerTests
     public async Task Handle_WhenOrderValidAndInventoryReserved_ShouldSubmitOrderAndPersist()
     {
         // Arrange
-        var order = Order.Create(CustomerId.New(), "USD");
+        var customerId = CustomerId.New();
+        _currentUser.IsAuthenticated.Returns(true);
+        _currentUser.CustomerId.Returns(customerId.Value);
+
+        var order = Order.Create(customerId, "USD");
         order.AddLine(ProductId.New(), "SKU-PUMP", "Pump", Money.Create(100m, "USD"), quantity: 5);
 
         _orderRepository.GetByIdAsync(Arg.Is<OrderId>(id => id.Value == order.Id.Value), Arg.Any<CancellationToken>())

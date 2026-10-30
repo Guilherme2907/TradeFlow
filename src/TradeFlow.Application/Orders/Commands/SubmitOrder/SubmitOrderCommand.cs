@@ -1,9 +1,9 @@
 using FluentValidation;
 using MediatR;
 using TradeFlow.Application.Common.Models;
+using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Orders;
-using TradeFlow.Domain.Orders.Exceptions;
 
 namespace TradeFlow.Application.Orders.Commands.SubmitOrder;
 
@@ -22,15 +22,18 @@ public sealed class SubmitOrderCommandHandler : IRequestHandler<SubmitOrderComma
     private readonly IOrderRepository _orderRepository;
     private readonly IInventoryReservationService _inventoryService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICurrentUserContext _currentUser;
 
     public SubmitOrderCommandHandler(
         IOrderRepository orderRepository,
         IInventoryReservationService inventoryService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ICurrentUserContext currentUser)
     {
         _orderRepository = orderRepository;
         _inventoryService = inventoryService;
         _unitOfWork = unitOfWork;
+        _currentUser = currentUser;
     }
 
     public async Task<Result> Handle(SubmitOrderCommand request, CancellationToken cancellationToken)
@@ -39,6 +42,15 @@ public sealed class SubmitOrderCommandHandler : IRequestHandler<SubmitOrderComma
         if (order is null)
         {
             return Result.Failure(Error.NotFound("ORDER_NOT_FOUND", $"Order '{request.OrderId}' was not found."));
+        }
+
+        // ADR-0013: Prevent BOLA/IDOR — callers may only submit orders belonging to their own CustomerId tenant
+        if (!_currentUser.IsInRole(TradeFlowRoles.Admin) &&
+            (_currentUser.CustomerId is null || order.CustomerId.Value != _currentUser.CustomerId.Value))
+        {
+            return Result.Failure(Error.Forbidden(
+                "ORDER_TENANT_FORBIDDEN",
+                "You do not have permission to submit an order belonging to another B2B customer tenant."));
         }
 
         // Verify domain invariants upfront outside the transaction (Narrow Transaction Principle: fail fast with 0 locks)

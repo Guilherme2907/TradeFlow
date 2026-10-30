@@ -40,6 +40,8 @@ public static class ResultExtensions
         var (statusCode, title) = error.Type switch
         {
             ErrorType.Validation => (StatusCodes.Status400BadRequest, "Bad Request"),
+            ErrorType.Unauthorized => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+            ErrorType.Forbidden => (StatusCodes.Status403Forbidden, "Forbidden"),
             ErrorType.NotFound => (StatusCodes.Status404NotFound, "Not Found"),
             ErrorType.Conflict => (StatusCodes.Status409Conflict, "Conflict"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")

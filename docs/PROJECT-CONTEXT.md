@@ -8,16 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 4: High-Throughput Event Streaming (Apache Kafka) [COMPLETED]` |
-| **Application Status** | Phase 1, 2, 3 & 4 Complete; Hybrid Messaging (RabbitMQ + Kafka KRaft) Fully Verified |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Transactional Outbox + RabbitMQ + Apache Kafka KRaft) |
+| **Current Stage** | `PHASE 5: Identity, Security & Access Control (OAuth2 / OIDC & Keycloak) [COMPLETED]` |
+| **Application Status** | Phase 1, 2, 3, 4 & 5 Complete; Stateless JWT Auth, RBAC & BOLA/IDOR Isolation Active |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (17), Architecture (17), API Integration Testcontainers (5), Infrastructure Integration Testcontainers (23) — 103 passing tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (20), Architecture (18), API Security & Integration Testcontainers (9), Infrastructure Integration Testcontainers (23) — 111 passing tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-10-29 |
+| **Last Updated** | 2026-10-30 |
 
 > [!NOTE]
-> Phase 4 (High-Throughput Event Streaming with Apache Kafka) is completed. TradeFlow operates with a symmetric dual-broker architecture: RabbitMQ handles discrete command/workflow tasks via Topic Exchange, while Kafka handles high-throughput ordered event streams (`KafkaTopology.TradesTopic`) partitioned deterministically by `ProductId` (`Acks.All`, `EnableIdempotence = true`). Outbox routing is governed centrally via `KafkaTopology.TryGetOutboxRoute` and `RabbitMqTopology.TryGetRoutingKey` without ad-hoc mapper classes. The consumer background service isolates poison pills into `tradeflow.market.trades.dlq` after transient in-memory retries, protecting partitions from Head-of-Line Blocking (ADR-0012). Memory is protected via bounded sliding windows (`MarketTradeAnalyticsHandler`). All 103 automated tests passing against real PostgreSQL, RabbitMQ, and Kafka containers.
+> Phase 5 (Stateless Federated Identity, OAuth2 / OIDC, RBAC & BOLA/IDOR Tenant Isolation) is completed. `TradeFlow.Api` validates RSA-2048 (`RS256`) JWT Bearer tokens issued by Keycloak 26 (`tradeflow` realm), normalizes nested `realm_access.roles` claims, and enforces Role-Based Access Control policies (`OrderWritePolicy`, `OrderCancelPolicy`, `OrderReadPolicy`). `TradeFlow.Application` remains 100% decoupled from `HttpContext`/`ClaimsPrincipal` via `ICurrentUserContext` (enforced by `NetArchTest`). To prevent Broken Object Level Authorization (BOLA / IDOR), `CustomerId` is never accepted from HTTP request bodies and is extracted exclusively from the signed `customer_id` JWT claim (ADR-0013). All 111 automated tests passing.
 
 ---
 
@@ -81,6 +81,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0010](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0010-generic-unit-of-work-shared-connection-and-retry-policy.md) | Generic Unit of Work over Shared Connection and Fail-Fast Transaction Boundaries | Accepted | 2026-10-13 |
 | [ADR-0011](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0011-transactional-outbox-pattern-and-idempotent-consumers.md) | Transactional Outbox Pattern with Polling Publisher (SKIP LOCKED) and Idempotent Consumers | Accepted | 2026-10-13 |
 | [ADR-0012](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0012-high-throughput-event-streaming-apache-kafka.md) | High-Throughput Event Streaming with Apache Kafka (KRaft), Partition Key Ordering, and Dead-Letter Topics | Accepted | 2026-10-28 |
+| [ADR-0013](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0013-identity-oauth2-oidc-rbac-and-tenant-isolation.md) | Stateless Federated Identity (OAuth2 / OIDC), RBAC & BOLA/IDOR Tenant Isolation | Accepted | 2026-10-30 |
 
 ---
 
@@ -95,5 +96,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 4 Core Kafka Event Streaming (`KafkaTopology`, `KafkaTradeStreamProducer`, `KafkaTradeStreamConsumerBackgroundService`, `MarketTradeAnalyticsHandler`, `ADR-0012`, and `KafkaTradeStreamIntegrationTests` with `Testcontainers.Kafka`). 103/103 tests passing.
-- **Next Planned Learning Step**: Consumer Group Rebalancing & Schema Evolution / Contract Compatibility in Kafka, or transition to **Phase 5: Identity, Security & Single Sign-On (OAuth2 / OIDC)**.
+- **Immediate Completed Task**: Phase 5 Stateless Federated Identity (OAuth2 / OIDC with Keycloak 26, `ICurrentUserContext`, RBAC Policies, BOLA/IDOR Tenant Isolation, `ADR-0013`, and `RS256` API Security Integration Tests). 111/111 tests passing.
+- **Next Planned Learning Step**: Phase 6 (Frontend / BFF / Single Sign-On Integration) or Phase 7 (Distributed Caching with Redis, Cache Stampede Prevention, Resiliency & OpenTelemetry).

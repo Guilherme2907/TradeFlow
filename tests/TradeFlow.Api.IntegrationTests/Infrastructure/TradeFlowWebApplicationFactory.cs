@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -6,8 +7,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
-using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure;
+using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 using TradeFlow.Infrastructure.Persistence;
 using Xunit;
@@ -38,9 +39,23 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
         builder.UseSetting("ConnectionStrings:RabbitMq", string.Empty);
         builder.UseSetting("ConnectionStrings:Kafka", string.Empty);
         builder.UseSetting("Outbox:BackgroundWorkerEnabled", "false");
+        builder.UseSetting("Authentication:Authority", TestJwtTokenGenerator.Issuer);
+        builder.UseSetting("Authentication:Audience", TestJwtTokenGenerator.Audience);
+        builder.UseSetting("Authentication:RequireHttpsMetadata", "false");
 
         builder.ConfigureServices(services =>
         {
+            // Configure JwtBearer to validate RS256 signatures against TestJwtTokenGenerator.SigningKey without external HTTP OIDC discovery
+            services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                options.Authority = null;
+                options.MetadataAddress = null!;
+                options.TokenValidationParameters.ValidIssuer = TestJwtTokenGenerator.Issuer;
+                options.TokenValidationParameters.ValidAudiences = [TestJwtTokenGenerator.Audience, "account"];
+                options.TokenValidationParameters.IssuerSigningKey = TestJwtTokenGenerator.SigningKey;
+                options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+            });
+
             var descriptors = services.Where(d =>
                 d.ServiceType == typeof(DbContextOptions<OrdersDbContext>) ||
                 d.ServiceType == typeof(DbContextOptions<InventoryDbContext>) ||
