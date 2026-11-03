@@ -8,6 +8,8 @@ using TradeFlow.Application.Orders.Commands.AddOrderLine;
 using TradeFlow.Application.Orders.Commands.CancelOrder;
 using TradeFlow.Application.Orders.Commands.CreateOrder;
 using TradeFlow.Application.Orders.Commands.SubmitOrder;
+using TradeFlow.Application.Orders.Queries.GetOrderById;
+using TradeFlow.Application.Common.Security;
 
 namespace TradeFlow.Api.Endpoints;
 
@@ -53,6 +55,16 @@ public static class OrderEndpoints
             .WithName("CancelOrder")
             .WithSummary("Cancels an order (allowed for the owning Trader or cross-tenant by RiskManager/Admin).")
             .Produces(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}", GetOrderByIdAsync)
+            .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
+            .WithName("GetOrderById")
+            .WithSummary("Retrieves an order by ID (served via Redis distributed cache when available).")
+            .Produces<OrderResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
@@ -110,6 +122,18 @@ public static class OrderEndpoints
     {
         var command = new CancelOrderCommand(id, request.Reason);
         var result = await sender.Send(command, cancellationToken);
+
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetOrderByIdAsync(
+        Guid id,
+        ISender sender,
+        ICurrentUserContext currentUser,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetOrderByIdQuery(id, currentUser.CustomerId);
+        var result = await sender.Send(query, cancellationToken);
 
         return result.ToHttpResult();
     }

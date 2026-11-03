@@ -8,16 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 5: Identity, Security & Access Control (OAuth2 / OIDC & Keycloak) [COMPLETED]` |
-| **Application Status** | Phase 1, 2, 3, 4 & 5 Complete; Stateless JWT Auth, RBAC & BOLA/IDOR Isolation Active |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC) |
+| **Current Stage** | `PHASE 6: Distributed Caching & High-Performance Resiliency (Redis) [ACTIVE]` |
+| **Application Status** | Phase 1 to 5 Complete; Redis Cache-Aside & Stampede Protection Active |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC + Redis Caching) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (20), Architecture (18), API Security & Integration Testcontainers (9), Infrastructure Integration Testcontainers (23) — 111 passing tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (27), Architecture (19), API Security Integration Testcontainers (11), Infrastructure Integration Testcontainers (26) — 124 total automated tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-10-30 |
+| **Last Updated** | 2026-11-03 |
 
 > [!NOTE]
-> Phase 5 (Stateless Federated Identity, OAuth2 / OIDC, RBAC & BOLA/IDOR Tenant Isolation) is completed. `TradeFlow.Api` validates RSA-2048 (`RS256`) JWT Bearer tokens issued by Keycloak 26 (`tradeflow` realm), normalizes nested `realm_access.roles` claims, and enforces Role-Based Access Control policies (`OrderWritePolicy`, `OrderCancelPolicy`, `OrderReadPolicy`). `TradeFlow.Application` remains 100% decoupled from `HttpContext`/`ClaimsPrincipal` via `ICurrentUserContext` (enforced by `NetArchTest`). To prevent Broken Object Level Authorization (BOLA / IDOR), `CustomerId` is never accepted from HTTP request bodies and is extracted exclusively from the signed `customer_id` JWT claim (ADR-0013). All 111 automated tests passing.
+> Phase 6 (Distributed Caching & High-Performance Resiliency with Redis 7) is active. High-frequency reads are served with sub-millisecond latency via the Cache-Aside pattern. `CachingBehavior<TRequest, TResponse>` in the MediatR pipeline intercepts queries implementing `ICacheableQuery` transparently, keeping query handlers 100% pure. Cache Stampede (Dog-piling / Thundering Herd) is eliminated via single-flight mutex coordination in `ICacheService.GetOrCreateAsync` combined with randomized TTL Jitter. When Redis is unavailable, the service fails open gracefully without taking down the API (ADR-0014). All 87 unit and architecture tests passing with 0 warnings.
 
 ---
 
@@ -82,6 +82,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0011](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0011-transactional-outbox-pattern-and-idempotent-consumers.md) | Transactional Outbox Pattern with Polling Publisher (SKIP LOCKED) and Idempotent Consumers | Accepted | 2026-10-13 |
 | [ADR-0012](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0012-high-throughput-event-streaming-apache-kafka.md) | High-Throughput Event Streaming with Apache Kafka (KRaft), Partition Key Ordering, and Dead-Letter Topics | Accepted | 2026-10-28 |
 | [ADR-0013](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0013-identity-oauth2-oidc-rbac-and-tenant-isolation.md) | Stateless Federated Identity (OAuth2 / OIDC), RBAC & BOLA/IDOR Tenant Isolation | Accepted | 2026-10-30 |
+| [ADR-0014](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0014-distributed-caching-cache-aside-stampede-protection-and-pipeline-behavior.md) | Distributed Caching (Cache-Aside), Single-Flight Stampede Protection & MediatR Pipeline Behavior | Accepted | 2026-11-03 |
 
 ---
 

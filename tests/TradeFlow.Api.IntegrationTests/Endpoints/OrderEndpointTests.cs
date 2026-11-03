@@ -232,4 +232,53 @@ public class OrderEndpointTests : IClassFixture<TradeFlowWebApplicationFactory>
         var submitResponse = await traderClient.PostAsync($"/api/orders/{orderId}/submit", null);
         submitResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task GetOrderById_WhenOrderExists_ShouldReturnOkWithOrderDetails()
+    {
+        // Arrange
+        var customerId = Guid.NewGuid();
+        using var traderClient = CreateAuthenticatedClient(customerId, TradeFlowRoles.Trader);
+
+        var createResponse = await traderClient.PostAsJsonAsync("/api/orders", new CreateOrderRequest(Currency: "USD"));
+        var orderId = await createResponse.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        // Act: First read (Database Miss / Cache Populated)
+        var firstResponse = await traderClient.GetAsync($"/api/orders/{orderId}");
+
+        // Assert
+        firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var firstOrder = await firstResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        firstOrder.GetProperty("orderId").GetString().Should().Be(orderId.ToString());
+        firstOrder.GetProperty("customerId").GetString().Should().Be(customerId.ToString());
+
+        // Act: Second read (Served transparently via Cache Hit)
+        var secondResponse = await traderClient.GetAsync($"/api/orders/{orderId}");
+        secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var secondOrder = await secondResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        secondOrder.GetProperty("orderId").GetString().Should().Be(orderId.ToString());
+    }
+
+    [Fact]
+    public async Task GetOrderById_WhenAttackerRequestsDifferentCustomerOrder_ShouldReturn403Forbidden()
+    {
+        // Arrange
+        var tenantAlpha = Guid.NewGuid();
+        var tenantBeta = Guid.NewGuid();
+
+        using var traderAlphaClient = CreateAuthenticatedClient(tenantAlpha, TradeFlowRoles.Trader);
+        using var traderBetaClient = CreateAuthenticatedClient(tenantBeta, TradeFlowRoles.Trader);
+
+        var createResponse = await traderAlphaClient.PostAsJsonAsync("/api/orders", new CreateOrderRequest(Currency: "USD"));
+        var orderId = await createResponse.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        // Act: Trader Beta attempts to read Trader Alpha's order
+        var response = await traderBetaClient.GetAsync($"/api/orders/{orderId}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var problemDetails = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        problemDetails.GetProperty("status").GetInt32().Should().Be(403);
+        problemDetails.GetProperty("code").GetString().Should().Be("ORDER_TENANT_FORBIDDEN");
+    }
 }

@@ -31,6 +31,24 @@ public class ApplicationDesignTests
     }
 
     [Fact]
+    public void Queries_ShouldBeSealed_AndEndWithQuery()
+    {
+        var result = Types.InAssembly(ApplicationAssembly)
+            .That()
+            .ImplementInterface(typeof(IRequest<>))
+            .And()
+            .ResideInNamespaceStartingWith("TradeFlow.Application.Orders.Queries")
+            .Should()
+            .BeSealed()
+            .And()
+            .HaveNameEndingWith("Query")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Queries must be sealed records/classes ending with 'Query'. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
     public void CommandHandlers_ShouldBeSealed_AndEndWithCommandHandler()
     {
         // Act: Handlers must be sealed classes ending with 'CommandHandler' or 'Handler'

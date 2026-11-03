@@ -4,12 +4,15 @@ using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TradeFlow.Application.Common.Caching;
 using TradeFlow.Application.Inventory.Contracts;
 using TradeFlow.Application.Inventory.Services;
 using TradeFlow.Application.Orders.Gateways;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Domain.Orders;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
+using TradeFlow.Infrastructure.Caching;
 using TradeFlow.Infrastructure.Messaging;
 using TradeFlow.Infrastructure.Messaging.Kafka;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
@@ -67,6 +70,17 @@ public static class DependencyInjection
         if (hasKafka)
         {
             services.AddKafkaStreaming(kafkaBootstrapServers!);
+        }
+
+        var redisConnectionString = configuration.GetConnectionString("Redis");
+        var hasRedis = !string.IsNullOrWhiteSpace(redisConnectionString);
+        if (hasRedis)
+        {
+            services.AddRedisCaching(redisConnectionString!);
+        }
+        else
+        {
+            services.AddInMemoryCaching();
         }
 
         if (hasRabbitMq && hasKafka)
@@ -147,6 +161,27 @@ public static class DependencyInjection
                     consumerGroupId));
         }
 
+        return services;
+    }
+
+    public static IServiceCollection AddRedisCaching(
+        this IServiceCollection services,
+        string redisConnectionString)
+    {
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        {
+            var options = ConfigurationOptions.Parse(redisConnectionString);
+            options.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(options);
+        });
+
+        services.AddSingleton<ICacheService, RedisCacheService>();
+        return services;
+    }
+
+    public static IServiceCollection AddInMemoryCaching(this IServiceCollection services)
+    {
+        services.AddSingleton<ICacheService, InMemoryCacheService>();
         return services;
     }
 
