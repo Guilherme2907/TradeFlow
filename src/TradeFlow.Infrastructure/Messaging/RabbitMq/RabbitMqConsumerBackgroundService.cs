@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using TradeFlow.Infrastructure.Diagnostics;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence.Inbox;
 
 namespace TradeFlow.Infrastructure.Messaging.RabbitMq;
@@ -136,6 +137,17 @@ public sealed class RabbitMqConsumerBackgroundService : BackgroundService
 
         var eventType = delivery.BasicProperties.Type ?? "Unknown";
         var payload = Encoding.UTF8.GetString(delivery.Body.ToArray());
+
+        var traceParent = TradeFlowDiagnostics.ExtractAmqpHeader(delivery.BasicProperties.Headers, "traceparent");
+        var traceState = TradeFlowDiagnostics.ExtractAmqpHeader(delivery.BasicProperties.Headers, "tracestate");
+
+        using var activity = TradeFlowDiagnostics.StartConsumerActivity(
+            name: $"{consumerName}.Handle",
+            traceParent: traceParent,
+            traceState: traceState,
+            messagingSystem: "rabbitmq",
+            destination: queueName,
+            messageId: messageId.ToString());
 
         try
         {

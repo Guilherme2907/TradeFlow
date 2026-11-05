@@ -43,7 +43,7 @@ public sealed class OutboxProcessor
 
         var messages = await _dbContext.OutboxMessages
             .FromSqlInterpolated($"""
-                SELECT id, event_type, payload, occurred_at, processed_at, error, retry_count
+                SELECT id, event_type, payload, occurred_at, processed_at, error, retry_count, trace_parent, trace_state
                 FROM orders.outbox_messages
                 WHERE processed_at IS NULL AND retry_count < {MaxRetryCount}
                 ORDER BY occurred_at
@@ -67,6 +67,8 @@ public sealed class OutboxProcessor
                     message.EventType,
                     message.Payload,
                     message.OccurredAt,
+                    message.TraceParent,
+                    message.TraceState,
                     cancellationToken);
 
                 message.MarkAsProcessed(DateTimeOffset.UtcNow);

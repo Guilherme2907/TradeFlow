@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TradeFlow.Infrastructure.Diagnostics;
 
 namespace TradeFlow.Infrastructure.Messaging.Kafka;
 
@@ -26,6 +27,8 @@ public sealed class KafkaOutboxMessagePublisher : IOutboxMessagePublisher
         string eventType,
         string payload,
         DateTimeOffset occurredAt,
+        string? traceParent = null,
+        string? traceState = null,
         CancellationToken cancellationToken = default)
     {
         if (!KafkaTopology.TryGetOutboxRoute(eventType, payload, out var topic, out var partitionKey))
@@ -39,6 +42,21 @@ public sealed class KafkaOutboxMessagePublisher : IOutboxMessagePublisher
             ["x-event-type"] = eventType,
             ["x-occurred-at"] = occurredAt.ToString("O")
         };
+
+        if (!string.IsNullOrWhiteSpace(traceParent))
+        {
+            headers["traceparent"] = traceParent;
+        }
+        if (!string.IsNullOrWhiteSpace(traceState))
+        {
+            headers["tracestate"] = traceState;
+        }
+
+        using var activity = TradeFlowDiagnostics.StartProducerActivity(
+            name: $"Kafka.Publish {topic}",
+            messagingSystem: "kafka",
+            destination: topic,
+            messageId: messageId.ToString());
 
         var delivery = await _kafkaProducer.PublishRawAsync(
             topic,

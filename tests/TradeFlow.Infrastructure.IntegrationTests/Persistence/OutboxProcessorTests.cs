@@ -237,6 +237,8 @@ public class OutboxProcessorTests : IAsyncLifetime
             string eventType,
             string payload,
             DateTimeOffset occurredAt,
+            string? traceParent = null,
+            string? traceState = null,
             CancellationToken cancellationToken = default)
             => _handler(messageId, eventType, payload, occurredAt, cancellationToken);
     }

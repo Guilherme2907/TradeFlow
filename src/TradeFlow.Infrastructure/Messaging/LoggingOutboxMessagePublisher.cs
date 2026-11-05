@@ -19,13 +19,16 @@ public sealed class LoggingOutboxMessagePublisher : IOutboxMessagePublisher
         string eventType,
         string payload,
         DateTimeOffset occurredAt,
+        string? traceParent = null,
+        string? traceState = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "Published outbox message {MessageId} of type {EventType} (OccurredAt: {OccurredAt})",
+            "Published outbox message {MessageId} of type {EventType} (OccurredAt: {OccurredAt}, TraceParent: {TraceParent})",
             messageId,
             eventType,
-            occurredAt);
+            occurredAt,
+            traceParent);
 
         return Task.CompletedTask;
     }

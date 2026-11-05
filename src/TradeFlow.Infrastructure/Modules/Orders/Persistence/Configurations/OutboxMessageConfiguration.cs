@@ -41,6 +41,14 @@ public class OutboxMessageConfiguration : IEntityTypeConfiguration<OutboxMessage
             .IsRequired()
             .HasDefaultValue(0);
 
+        builder.Property(x => x.TraceParent)
+            .HasColumnName("trace_parent")
+            .HasMaxLength(256);
+
+        builder.Property(x => x.TraceState)
+            .HasColumnName("trace_state")
+            .HasMaxLength(512);
+
         builder.HasIndex(x => x.OccurredAt)
             .HasDatabaseName("idx_orders_outbox_unprocessed")
             .HasFilter($"processed_at IS NULL AND retry_count < {OutboxProcessor.MaxRetryCount}");

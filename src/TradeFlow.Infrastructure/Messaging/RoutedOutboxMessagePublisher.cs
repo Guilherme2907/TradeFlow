@@ -19,11 +19,13 @@ public sealed class RoutedOutboxMessagePublisher : IOutboxMessagePublisher
         string eventType,
         string payload,
         DateTimeOffset occurredAt,
+        string? traceParent = null,
+        string? traceState = null,
         CancellationToken cancellationToken = default)
     {
         foreach (var publisher in _publishers)
         {
-            await publisher.PublishAsync(messageId, eventType, payload, occurredAt, cancellationToken);
+            await publisher.PublishAsync(messageId, eventType, payload, occurredAt, traceParent, traceState, cancellationToken);
         }
     }
 }

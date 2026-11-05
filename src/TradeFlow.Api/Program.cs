@@ -37,6 +37,7 @@ builder.Services.AddOpenApi(options =>
     });
 });
 builder.Services.AddTradeFlowSecurity(builder.Configuration);
+builder.Services.AddTradeFlowTelemetry(builder.Configuration);
 
 // Clean Architecture layers
 builder.Services.AddApplication();

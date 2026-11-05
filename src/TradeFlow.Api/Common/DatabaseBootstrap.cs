@@ -62,6 +62,14 @@ public static class DatabaseBootstrap
             var ordersCreator = (RelationalDatabaseCreator)ordersContext.Database.GetService<IDatabaseCreator>();
             await ordersCreator.CreateTablesAsync();
         }
+        else
+        {
+            // Ensure outbox_messages table has trace context columns on existing databases (ADR-0015)
+            await ordersContext.Database.ExecuteSqlRawAsync(@"
+                ALTER TABLE orders.outbox_messages ADD COLUMN IF NOT EXISTS trace_parent VARCHAR(256);
+                ALTER TABLE orders.outbox_messages ADD COLUMN IF NOT EXISTS trace_state VARCHAR(512);
+            ");
+        }
 
         // 3. Ensure Inventory tables exist
         var inventoryTableExists = await TableExistsAsync(inventoryContext, "inventory", "inventory_items");

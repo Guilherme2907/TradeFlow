@@ -13,6 +13,8 @@ public sealed class OutboxMessage
     public DateTimeOffset? ProcessedAt { get; private set; }
     public string? Error { get; private set; }
     public int RetryCount { get; private set; }
+    public string? TraceParent { get; private set; }
+    public string? TraceState { get; private set; }
 
     private OutboxMessage() { } // EF Core
 
@@ -20,12 +22,16 @@ public sealed class OutboxMessage
         Guid id,
         string eventType,
         string payload,
-        DateTimeOffset occurredAt)
+        DateTimeOffset occurredAt,
+        string? traceParent = null,
+        string? traceState = null)
     {
         Id = id;
         EventType = eventType;
         Payload = payload;
         OccurredAt = occurredAt;
+        TraceParent = traceParent;
+        TraceState = traceState;
     }
 
     public void MarkAsProcessed(DateTimeOffset processedAt)

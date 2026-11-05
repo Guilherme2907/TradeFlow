@@ -1,8 +1,10 @@
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TradeFlow.Infrastructure.Diagnostics;
 
 namespace TradeFlow.Infrastructure.Messaging.Kafka;
 
@@ -135,6 +137,31 @@ public sealed class KafkaTradeStreamConsumerBackgroundService : BackgroundServic
         var offset = consumeResult.Offset.Value;
         var key = consumeResult.Message.Key ?? string.Empty;
         var rawPayload = consumeResult.Message.Value ?? string.Empty;
+
+        string? traceParent = null;
+        string? traceState = null;
+        if (consumeResult.Message.Headers is not null)
+        {
+            foreach (var header in consumeResult.Message.Headers)
+            {
+                if (header.Key.Equals("traceparent", StringComparison.OrdinalIgnoreCase))
+                {
+                    traceParent = Encoding.UTF8.GetString(header.GetValueBytes());
+                }
+                else if (header.Key.Equals("tracestate", StringComparison.OrdinalIgnoreCase))
+                {
+                    traceState = Encoding.UTF8.GetString(header.GetValueBytes());
+                }
+            }
+        }
+
+        using var activity = TradeFlowDiagnostics.StartConsumerActivity(
+            name: "KafkaTradeStream.Consume",
+            traceParent: traceParent,
+            traceState: traceState,
+            messagingSystem: "kafka",
+            destination: consumeResult.Topic,
+            messageId: $"{partition}:{offset}");
 
         try
         {

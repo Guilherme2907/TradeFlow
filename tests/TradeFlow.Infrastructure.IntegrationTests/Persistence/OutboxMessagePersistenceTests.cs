@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -149,5 +150,35 @@ public class OutboxMessagePersistenceTests : IAsyncLifetime
         message.RetryCount.Should().Be(2);
         message.Error.Should().Be("Timeout waiting for ACK");
         message.ProcessedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SubmitOrder_WhenSavedInsideActiveActivity_ShouldCaptureAndPersistW3CTraceParent()
+    {
+        // Arrange
+        var customerId = CustomerId.New();
+        var order = Order.Create(customerId, "USD");
+        var productId = ProductId.New();
+        order.AddLine(productId, "SKU-SENSOR-01", "Pressure Sensor", Money.Create(150m, "USD"), 1);
+        order.Submit();
+
+        // Simulate an ambient HTTP incoming request activity with W3C TraceContext
+        using var testActivity = new Activity("Http.TestRequest");
+        testActivity.SetIdFormat(ActivityIdFormat.W3C);
+        testActivity.Start();
+
+        var expectedTraceParent = testActivity.Id;
+        expectedTraceParent.Should().NotBeNullOrWhiteSpace();
+
+        // Act
+        await _context.Orders.AddAsync(order);
+        await _context.SaveChangesAsync();
+
+        _context.ChangeTracker.Clear();
+
+        // Assert: Outbox record must hold the exact W3C traceparent from the active ambient Activity
+        var outboxMessage = await _context.OutboxMessages.FirstOrDefaultAsync(m => m.EventType == nameof(OrderSubmittedEvent));
+        outboxMessage.Should().NotBeNull();
+        outboxMessage!.TraceParent.Should().Be(expectedTraceParent);
     }
 }

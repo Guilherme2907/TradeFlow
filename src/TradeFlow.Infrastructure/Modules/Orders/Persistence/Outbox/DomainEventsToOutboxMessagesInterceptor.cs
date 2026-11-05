@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -58,6 +59,10 @@ public sealed class DomainEventsToOutboxMessagesInterceptor : SaveChangesInterce
 
         var outboxMessages = new List<OutboxMessage>();
 
+        var currentActivity = Activity.Current;
+        var traceParent = currentActivity?.Id;
+        var traceState = currentActivity?.TraceStateString;
+
         foreach (var entity in entitiesWithEvents)
         {
             foreach (var domainEvent in entity.DomainEvents)
@@ -67,7 +72,9 @@ public sealed class DomainEventsToOutboxMessagesInterceptor : SaveChangesInterce
                     domainEvent.EventId,
                     domainEvent.GetType().Name,
                     payload,
-                    domainEvent.OccurredOn);
+                    domainEvent.OccurredOn,
+                    traceParent,
+                    traceState);
 
                 outboxMessages.Add(outboxMessage);
             }

@@ -1,4 +1,4 @@
-# Learning State — Engineering Mastery Tracker
+﻿# Learning State — Engineering Mastery Tracker
 
 This document is the persistent registry of technical competencies, architectural reasoning progress, testing mastery, diagnostic performance, and growth areas throughout the TradeFlow project.
 
@@ -74,12 +74,12 @@ Testing is a primary engineering axis. Each level is tracked independently to en
 | **9. Performance Testing** | `Not Started` | No (Phase 7) | — | — | — | — |
 | **10. Architecture Testing** | `Strong` | Yes (Phase 2) | — | Multi-project explosion vs single-project modularity | NetArchTest layer rules, entity encapsulation, Anti-Backdoor rule, bounded context isolation | 2026-10-06 |
 
-*Active Testing Baseline (124 total automated tests; 87 non-Docker passing)*:
+*Active Testing Baseline (129 total automated tests; 87 non-Docker passing)*:
 - Unit/Domain: 41 tests (Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
 - Unit/Application: 27 tests (Command & Query handlers, CachingBehavior, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering)
 - Architecture: 19 tests (Layer dependencies, entity encapsulation, Anti-Backdoor rule, Module boundaries, infrastructure isolation, IModuleDbContext enforcement, Query naming & sealing rules)
 - API Security & Integration: 11 tests (HTTP contracts, RFC 7807 problem details, real PostgreSQL cross-context database commits, RS256 JWT RBAC policies, BOLA/IDOR tenant isolation, GetOrderById positive & negative tenant checks)
-- Infrastructure Integration: 26 tests (Real PostgreSQL, RabbitMQ, Kafka, and Redis in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis concurrent single-flight stampede protection, Redis prefix eviction)
+- Infrastructure Integration: 26 tests (Real PostgreSQL, RabbitMQ, Kafka, and Redis in Docker Testcontainers: Order persistence, OCC rowversion concurrency, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis concurrent single-flight stampede protection, Redis prefix eviction, OpenTelemetry W3C traceparent outbox capture, and distributed tracing propagation)
 
 ---
 

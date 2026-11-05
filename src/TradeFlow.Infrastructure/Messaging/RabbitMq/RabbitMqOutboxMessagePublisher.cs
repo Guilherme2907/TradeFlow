@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
+using TradeFlow.Infrastructure.Diagnostics;
 
 namespace TradeFlow.Infrastructure.Messaging.RabbitMq;
 
@@ -28,6 +29,8 @@ public sealed class RabbitMqOutboxMessagePublisher : IOutboxMessagePublisher, IA
         string eventType,
         string payload,
         DateTimeOffset occurredAt,
+        string? traceParent = null,
+        string? traceState = null,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -46,8 +49,24 @@ public sealed class RabbitMqOutboxMessagePublisher : IOutboxMessagePublisher, IA
             Type = eventType,
             ContentType = "application/json",
             DeliveryMode = DeliveryModes.Persistent,
-            Timestamp = new AmqpTimestamp(occurredAt.ToUnixTimeSeconds())
+            Timestamp = new AmqpTimestamp(occurredAt.ToUnixTimeSeconds()),
+            Headers = new Dictionary<string, object?>()
         };
+
+        if (!string.IsNullOrWhiteSpace(traceParent))
+        {
+            properties.Headers["traceparent"] = traceParent;
+        }
+        if (!string.IsNullOrWhiteSpace(traceState))
+        {
+            properties.Headers["tracestate"] = traceState;
+        }
+
+        using var activity = TradeFlowDiagnostics.StartProducerActivity(
+            name: $"RabbitMq.Publish {routingKey}",
+            messagingSystem: "rabbitmq",
+            destination: RabbitMqTopology.EventsExchangeName,
+            messageId: messageId.ToString());
 
         // Because the channel was created with publisherConfirmationsEnabled & publisherConfirmationTrackingEnabled,
         // BasicPublishAsync awaits the broker's Publisher Confirm (Basic.Ack) before completing,
