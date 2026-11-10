@@ -56,22 +56,32 @@ public sealed class KafkaOutboxMessagePublisher : IOutboxMessagePublisher
             name: $"Kafka.Publish {topic}",
             messagingSystem: "kafka",
             destination: topic,
-            messageId: messageId.ToString());
+            messageId: messageId.ToString(),
+            traceParent: traceParent,
+            traceState: traceState);
 
-        var delivery = await _kafkaProducer.PublishRawAsync(
-            topic,
-            partitionKey,
-            payload,
-            headers,
-            cancellationToken);
+        try
+        {
+            var delivery = await _kafkaProducer.PublishRawAsync(
+                topic,
+                partitionKey,
+                payload,
+                headers,
+                cancellationToken);
 
-        _logger.LogDebug(
-            "Streamed outbox event {MessageId} ({EventType}) directly to Kafka topic '{Topic}' [Partition: {Partition}, Offset: {Offset}, Key: {Key}]",
-            messageId,
-            eventType,
-            delivery.Topic,
-            delivery.Partition,
-            delivery.Offset,
-            partitionKey);
+            _logger.LogDebug(
+                "Streamed outbox event {MessageId} ({EventType}) directly to Kafka topic '{Topic}' [Partition: {Partition}, Offset: {Offset}, Key: {Key}]",
+                messageId,
+                eventType,
+                delivery.Topic,
+                delivery.Partition,
+                delivery.Offset,
+                partitionKey);
+        }
+        catch (Exception ex)
+        {
+            activity.RecordError(ex);
+            throw;
+        }
     }
 }

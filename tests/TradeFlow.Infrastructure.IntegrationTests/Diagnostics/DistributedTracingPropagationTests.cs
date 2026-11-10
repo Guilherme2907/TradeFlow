@@ -108,4 +108,62 @@ public sealed class DistributedTracingPropagationTests
         // Assert
         result.Should().Be(traceParent);
     }
+
+    [Fact]
+    public void StartProducerActivity_WhenGivenTraceParent_ShouldCreateChildSpanWithMatchingTraceId()
+    {
+        // Arrange
+        const string incomingTraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        const string expectedTraceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+        const string expectedParentSpanId = "00f067aa0ba902b7";
+
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == TradeFlowDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        // Act
+        using var activity = TradeFlowDiagnostics.StartProducerActivity(
+            name: "RabbitMq.Publish orders.OrderSubmittedEvent",
+            messagingSystem: "rabbitmq",
+            destination: "tradeflow.events",
+            messageId: Guid.NewGuid().ToString(),
+            traceParent: incomingTraceParent);
+
+        // Assert
+        activity.Should().NotBeNull();
+        activity!.TraceId.ToString().Should().Be(expectedTraceId);
+        activity.ParentSpanId.ToString().Should().Be(expectedParentSpanId);
+    }
+
+    [Fact]
+    public void RecordError_WhenCalled_ShouldSetErrorStatusAndAddExceptionEvent()
+    {
+        // Arrange
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == TradeFlowDiagnostics.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = TradeFlowDiagnostics.ActivitySource.StartActivity("TestOperation");
+        var testException = new InvalidOperationException("Simulated consumer failure for testing");
+
+        // Act
+        activity.RecordError(testException);
+
+        // Assert
+        activity.Should().NotBeNull();
+        activity!.Status.Should().Be(ActivityStatusCode.Error);
+        activity.StatusDescription.Should().Be("Simulated consumer failure for testing");
+
+        var exceptionEvent = activity.Events.FirstOrDefault(e => e.Name == "exception");
+        exceptionEvent.Should().NotBeNull();
+        exceptionEvent.Tags.Should().Contain(t => t.Key == "exception.type" && (string?)t.Value == typeof(InvalidOperationException).FullName);
+        exceptionEvent.Tags.Should().Contain(t => t.Key == "exception.message" && (string?)t.Value == "Simulated consumer failure for testing");
+        exceptionEvent.Tags.Should().Contain(t => t.Key == "exception.stacktrace");
+    }
 }

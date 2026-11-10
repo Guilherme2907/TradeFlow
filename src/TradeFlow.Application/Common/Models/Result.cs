@@ -6,6 +6,8 @@ public class Result
     public bool IsFailure => !IsSuccess;
     public Error Error { get; }
 
+    private Result() { } // Prevent external inheritance
+
     protected Result(bool isSuccess, Error error)
     {
         if (isSuccess && error != Error.None)

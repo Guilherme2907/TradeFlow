@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 using Testcontainers.Redis;
+using TradeFlow.Application.Common.Models;
+using TradeFlow.Application.Orders.Queries.GetOrderById;
 using TradeFlow.Infrastructure.Caching;
 using Xunit;
 
@@ -102,6 +104,64 @@ public class RedisCacheIntegrationTests : IAsyncLifetime
         copper.Should().Be(default);
         zinc.Should().Be(default);
         oil.Should().Be(300m, "Unrelated prefixes must not be evicted");
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_WithResultOrderResponse_ShouldUnwrapJsonInRedisAndDeserializeOnCacheHit()
+    {
+        // Arrange: Simulate the exact TResponse used by CachingBehavior<GetOrderByIdQuery, Result<OrderResponse>>
+        var orderId = Guid.NewGuid();
+        var customerId = Guid.NewGuid();
+        var cacheKey = $"orders:{orderId}:tenant:{customerId}";
+        var factoryCalls = 0;
+
+        var orderDto = new OrderResponse(
+            OrderId: orderId,
+            CustomerId: customerId,
+            Status: "Submitted",
+            Currency: "USD",
+            TotalAmount: 860.00m,
+            Lines:
+            [
+                new OrderLineResponse(Guid.NewGuid(), Guid.NewGuid(), "SKU-STEEL-001", "Steel Sheets", 250m, "USD", 2, 500m),
+                new OrderLineResponse(Guid.NewGuid(), Guid.NewGuid(), "SKU-COPPER-002", "Copper Rods", 120m, "USD", 3, 360m)
+            ],
+            CreatedAt: DateTimeOffset.UtcNow);
+
+        Task<Result<OrderResponse>> FactoryAsync(CancellationToken _)
+        {
+            Interlocked.Increment(ref factoryCalls);
+            return Task.FromResult(Result.Success(orderDto));
+        }
+
+        // Act 1: First call (Cache Miss -> executes factory -> serializes to Redis)
+        var firstCall = await _cacheService.GetOrCreateAsync(
+            cacheKey,
+            FactoryAsync,
+            TimeSpan.FromMinutes(5),
+            shouldCache: res => res is not Result { IsFailure: true });
+
+        // Act 2: Second call (Cache Hit -> deserializes Result<OrderResponse> from Redis without calling factory)
+        var secondCall = await _cacheService.GetOrCreateAsync(
+            cacheKey,
+            FactoryAsync,
+            TimeSpan.FromMinutes(5),
+            shouldCache: res => res is not Result { IsFailure: true });
+
+        // Assert
+        factoryCalls.Should().Be(1, "Second call must be served from Redis cache without hitting the database factory!");
+        firstCall.Should().NotBeNull();
+        secondCall.Should().NotBeNull();
+        secondCall!.IsSuccess.Should().BeTrue();
+        secondCall.Value.OrderId.Should().Be(orderId);
+        secondCall.Value.TotalAmount.Should().Be(860.00m);
+        secondCall.Value.Lines.Should().HaveCount(2);
+
+        // Verify raw JSON stored in Redis is the unwrapped OrderResponse (no 'isSuccess' or 'error' wrapper pollution)
+        var rawJson = (string?)await _connectionMultiplexer.GetDatabase().StringGetAsync(cacheKey);
+        rawJson.Should().NotBeNullOrWhiteSpace();
+        rawJson.Should().Contain("\"orderId\":");
+        rawJson.Should().NotContain("\"isSuccess\":");
     }
 
     private sealed record TestOrderSummary(Guid OrderId, string Currency, decimal Total);

@@ -16,7 +16,10 @@ namespace TradeFlow.Infrastructure.Caching;
 /// </summary>
 public sealed class RedisCacheService : ICacheService
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new ResultJsonConverterFactory() }
+    };
     public static readonly TimeSpan DefaultExpiration = TimeSpan.FromMinutes(5);
 
     private readonly IConnectionMultiplexer _redis;

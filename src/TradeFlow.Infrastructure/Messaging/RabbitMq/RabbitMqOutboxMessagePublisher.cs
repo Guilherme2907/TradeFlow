@@ -66,24 +66,34 @@ public sealed class RabbitMqOutboxMessagePublisher : IOutboxMessagePublisher, IA
             name: $"RabbitMq.Publish {routingKey}",
             messagingSystem: "rabbitmq",
             destination: RabbitMqTopology.EventsExchangeName,
-            messageId: messageId.ToString());
+            messageId: messageId.ToString(),
+            traceParent: traceParent,
+            traceState: traceState);
 
-        // Because the channel was created with publisherConfirmationsEnabled & publisherConfirmationTrackingEnabled,
-        // BasicPublishAsync awaits the broker's Publisher Confirm (Basic.Ack) before completing,
-        // and throws if the broker returns Basic.Nack or disconnects.
-        await channel.BasicPublishAsync(
-            exchange: RabbitMqTopology.EventsExchangeName,
-            routingKey: routingKey,
-            mandatory: false,
-            basicProperties: properties,
-            body: body,
-            cancellationToken: cancellationToken);
+        try
+        {
+            // Because the channel was created with publisherConfirmationsEnabled & publisherConfirmationTrackingEnabled,
+            // BasicPublishAsync awaits the broker's Publisher Confirm (Basic.Ack) before completing,
+            // and throws if the broker returns Basic.Nack or disconnects.
+            await channel.BasicPublishAsync(
+                exchange: RabbitMqTopology.EventsExchangeName,
+                routingKey: routingKey,
+                mandatory: false,
+                basicProperties: properties,
+                body: body,
+                cancellationToken: cancellationToken);
 
-        _logger.LogDebug(
-            "Published and confirmed outbox message {MessageId} to exchange {Exchange} with routing key {RoutingKey}",
-            messageId,
-            RabbitMqTopology.EventsExchangeName,
-            routingKey);
+            _logger.LogDebug(
+                "Published and confirmed outbox message {MessageId} to exchange {Exchange} with routing key {RoutingKey}",
+                messageId,
+                RabbitMqTopology.EventsExchangeName,
+                routingKey);
+        }
+        catch (Exception ex)
+        {
+            activity.RecordError(ex);
+            throw;
+        }
     }
 
     private async Task<IChannel> GetOrCreateConfirmedChannelAsync(CancellationToken cancellationToken)

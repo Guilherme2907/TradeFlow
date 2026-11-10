@@ -169,6 +169,8 @@ public sealed class RabbitMqConsumerBackgroundService : BackgroundService
         }
         catch (Exception ex)
         {
+            activity.RecordError(ex);
+
             _logger.LogError(
                 ex,
                 "Consumer {ConsumerName} failed processing message {MessageId} on queue '{QueueName}'. Sending Basic.Nack to DLQ.",

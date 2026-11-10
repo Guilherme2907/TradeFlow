@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Npgsql;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -30,6 +31,19 @@ public static class TelemetryConfiguration
                     .AddAspNetCoreInstrumentation(options =>
                     {
                         options.RecordException = true;
+                        options.EnrichWithHttpResponse = (activity, response) =>
+                        {
+                            if (response.StatusCode >= 500)
+                            {
+                                var exceptionFeature = response.HttpContext.Features.Get<IExceptionHandlerPathFeature>()
+                                    ?? response.HttpContext.Features.Get<IExceptionHandlerFeature>();
+
+                                if (exceptionFeature?.Error is not null)
+                                {
+                                    activity.RecordError(exceptionFeature.Error);
+                                }
+                            }
+                        };
                     })
                     .AddHttpClientInstrumentation(options =>
                     {

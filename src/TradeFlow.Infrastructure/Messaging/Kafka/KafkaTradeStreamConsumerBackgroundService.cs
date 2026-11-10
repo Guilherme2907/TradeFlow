@@ -178,6 +178,8 @@ public sealed class KafkaTradeStreamConsumerBackgroundService : BackgroundServic
         }
         catch (Exception ex)
         {
+            activity.RecordError(ex);
+
             // ADR-0012: Poison Pill Isolation — route to Dead-Letter Topic and commit offset on main partition
             // so subsequent valid events in this partition are NEVER blocked (prevents Head-of-Line Blocking).
             _logger.LogError(
