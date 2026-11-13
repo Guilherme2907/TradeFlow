@@ -64,7 +64,7 @@ What business or engineering forces are at play? What is the current state of th
 What specific engineering problem or constraint must be resolved? Why can we not continue with the existing approach?
 
 ## 3. Options Considered
-Detail at least 2–3 viable alternatives:
+Detail at least 2â€“3 viable alternatives:
 - **Option A: [Name]**
   - *Pros*: ...
   - *Cons*: ...
@@ -89,18 +89,20 @@ Under what specific circumstances or metrics would this decision stop being appr
 
 | ADR ID | Title | Status | Date | Superceded By |
 | :--- | :--- | :--- | :--- | :--- |
-| [ADR-0001](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0001-orderline-snapshot-and-identifier-reference.md) | OrderLine Snapshot and Identifier Reference Across Bounded Contexts | Accepted | 2026-09-28 | — |
-| [ADR-0002](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0002-monolith-order-intake-transaction-boundary.md) | Monolith Order Intake Transaction Boundary & Aggregate Isolation | Accepted | 2026-09-28 | — |
-| [ADR-0003](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0003-in-process-mediator-and-pipeline-behaviors.md) | In-Process Application Dispatching via MediatR and Pipeline Behaviors | Accepted | 2026-09-29 | — |
-| [ADR-0004](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0004-persistence-mapping-complex-types-backing-fields.md) | Persistence Mapping via EF Core Complex Types and Backing Fields | Accepted | 2026-10-01 | — |
-| [ADR-0005](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0005-minimal-apis-and-problem-details.md) | Presentation Layer via Minimal APIs and RFC 7807 Problem Details | Accepted | 2026-10-04 | — |
-| [ADR-0006](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0006-architectural-fitness-functions-and-rules.md) | Automated Architectural Fitness Functions via NetArchTest | Accepted | 2026-10-06 | — |
-| [ADR-0007](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0007-modular-monolith-schema-isolation-and-module-contracts.md) | Modular Monolith PostgreSQL Schema Isolation and Module Contracts | Accepted | 2026-10-06 | — |
-| [ADR-0008](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0008-modular-infrastructure-and-dedicated-dbcontexts.md) | Modular Infrastructure Organization and Dedicated DbContexts | Accepted | 2026-10-07 | — |
-| [ADR-0009](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0009-pessimistic-locking-and-deterministic-ordering-for-inventory.md) | Pessimistic Row Locking and Deterministic Ordering for Inventory Contention | Accepted | 2026-10-07 | — |
-| [ADR-0010](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0010-generic-unit-of-work-shared-connection-and-retry-policy.md) | Generic Unit of Work over a Shared Connection and Retry-Safe Transaction Delegates | Accepted | 2026-10-13 | � |
-| [ADR-0011](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0011-transactional-outbox-pattern-and-idempotent-consumers.md) | Transactional Outbox Pattern with Polling Publisher (SKIP LOCKED) and Idempotent Consumers | Accepted | 2026-10-13 | � |
+| [ADR-0001](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0001-orderline-snapshot-and-identifier-reference.md) | OrderLine Snapshot and Identifier Reference Across Bounded Contexts | Accepted | 2026-09-28 | â€” |
+| [ADR-0002](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0002-monolith-order-intake-transaction-boundary.md) | Monolith Order Intake Transaction Boundary & Aggregate Isolation | Accepted | 2026-09-28 | â€” |
+| [ADR-0003](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0003-in-process-mediator-and-pipeline-behaviors.md) | In-Process Application Dispatching via MediatR and Pipeline Behaviors | Accepted | 2026-09-29 | â€” |
+| [ADR-0004](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0004-persistence-mapping-complex-types-backing-fields.md) | Persistence Mapping via EF Core Complex Types and Backing Fields | Accepted | 2026-10-01 | â€” |
+| [ADR-0005](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0005-minimal-apis-and-problem-details.md) | Presentation Layer via Minimal APIs and RFC 7807 Problem Details | Accepted | 2026-10-04 | â€” |
+| [ADR-0006](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0006-architectural-fitness-functions-and-rules.md) | Automated Architectural Fitness Functions via NetArchTest | Accepted | 2026-10-06 | â€” |
+| [ADR-0007](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0007-modular-monolith-schema-isolation-and-module-contracts.md) | Modular Monolith PostgreSQL Schema Isolation and Module Contracts | Accepted | 2026-10-06 | â€” |
+| [ADR-0008](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0008-modular-infrastructure-and-dedicated-dbcontexts.md) | Modular Infrastructure Organization and Dedicated DbContexts | Accepted | 2026-10-07 | â€” |
+| [ADR-0009](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0009-pessimistic-locking-and-deterministic-ordering-for-inventory.md) | Pessimistic Row Locking and Deterministic Ordering for Inventory Contention | Accepted | 2026-10-07 | â€” |
+| [ADR-0010](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0010-generic-unit-of-work-shared-connection-and-retry-policy.md) | Generic Unit of Work over a Shared Connection and Retry-Safe Transaction Delegates | Accepted | 2026-10-13 | — |
+| [ADR-0011](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0011-transactional-outbox-pattern-and-idempotent-consumers.md) | Transactional Outbox Pattern with Polling Publisher (SKIP LOCKED) and Idempotent Consumers | Accepted | 2026-10-13 | — |
 
 | [ADR-0012](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0012-high-throughput-event-streaming-apache-kafka.md) | High-Throughput Event Streaming with Apache Kafka (KRaft), Partition Key Ordering, and Dead-Letter Topics | Accepted | 2026-10-28 | - |
 | [ADR-0013](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0013-identity-oauth2-oidc-rbac-and-tenant-isolation.md) | Stateless Federated Identity (OAuth2 / OIDC), RBAC & BOLA/IDOR Tenant Isolation | Accepted | 2026-10-30 | - |
-| [ADR-0014](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0014-distributed-caching-cache-aside-stampede-protection-and-pipeline-behavior.md) | Distributed Caching (Cache-Aside), Single-Flight Stampede Protection & MediatR Pipeline Behavior | Accepted | 2026-11-03 | - || [ADR-0015](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0015-distributed-tracing-opentelemetry-w3c-outbox-propagation.md) | End-to-End Distributed Tracing with OpenTelemetry, W3C TraceContext, and Outbox Propagation | Accepted | 2026-11-03 | - |
+| [ADR-0014](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0014-distributed-caching-cache-aside-stampede-protection-and-pipeline-behavior.md) | Distributed Caching (Cache-Aside), Single-Flight Stampede Protection & MediatR Pipeline Behavior | Accepted | 2026-11-03 | — |
+| [ADR-0015](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0015-distributed-tracing-opentelemetry-w3c-outbox-propagation.md) | End-to-End Distributed Tracing with OpenTelemetry, W3C TraceContext, and Outbox Propagation | Accepted | 2026-11-03 | — |
+| [ADR-0016](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0016-resilience-rate-limiting-circuit-breaker-bulkhead.md) | Edge Rate Limiting, Load Shedding, and Outbound Resilience Pipelines with Polly v8 & Redis | Accepted | 2026-11-12 | — |

@@ -176,12 +176,14 @@ public static class DependencyInjection
         });
 
         services.AddSingleton<ICacheService, RedisCacheService>();
+        services.AddSingleton<IDistributedRateLimiter, RedisDistributedRateLimiter>();
         return services;
     }
 
     public static IServiceCollection AddInMemoryCaching(this IServiceCollection services)
     {
         services.AddSingleton<ICacheService, InMemoryCacheService>();
+        services.AddSingleton<IDistributedRateLimiter, InMemoryDistributedRateLimiter>();
         return services;
     }
 

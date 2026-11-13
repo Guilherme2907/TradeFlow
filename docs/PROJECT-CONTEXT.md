@@ -8,16 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 7: End-to-End Distributed Tracing & Observability (OpenTelemetry & Jaeger) [ACTIVE]` |
-| **Application Status** | Phase 1 to 7 Complete; Full W3C TraceContext Propagation Across HTTP, Outbox, RabbitMQ, Kafka & Jaeger |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC + Redis Caching + OpenTelemetry Tracing) |
+| **Current Stage** | `PHASE 8: Advanced Resilience, Fault Tolerance & Edge Protection (Polly v8 & Redis Lua) [ACTIVE]` |
+| **Application Status** | Phase 1 to 8 Complete; Edge Load Shedding, Multi-Tenant Distributed Rate Limiting & Polly v8 Outbound Pipelines |
+| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC + Redis Caching & Rate Limiting + OpenTelemetry + Polly v8 Resilience) |
 | **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (27), Architecture (19), Infrastructure Integration Testcontainers (31), API Integration Testcontainers (11) — 129 total automated tests |
+| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (27), Architecture (19), Infrastructure Integration Testcontainers (33), API Integration & Resilience (17) — 137 total automated tests |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-11-04 |
+| **Last Updated** | 2026-11-13 |
 
 > [!NOTE]
-> Phase 7 (End-to-End Distributed Tracing & Observability with OpenTelemetry) is active. The architecture bridges the asynchronous persistence boundary of the Transactional Outbox by capturing W3C `traceparent` (`00-{traceId}-{spanId}-{flags}`) in `orders.outbox_messages.trace_parent`. Outbox background processors inject headers into RabbitMQ AMQP and Kafka records, and asynchronous consumers extract parent contexts (`ActivityKind.Consumer`) to maintain unified causal traces. Spans are enriched with semantic conventions and exported via OTLP to Jaeger (`:4317` / `:16686`). All 129 automated tests passing with 0 warnings.
+> Phase 8 (Advanced Resilience, Fault Tolerance & Edge Protection) is complete. Inbound traffic is protected by `TradeFlowResilienceMiddleware` enforcing global Load Shedding (`SemaphoreSlim.Wait(0)`) and context-aware Distributed Rate Limiting (`tenant:{customer_id}` for B2B order routes vs `auth-ip:{ip}` for brute-force protection) backed by atomic Redis Lua scripts (`INCR` + `PEXPIRE` + `PTTL`) with automatic Fail-Open fallback to `InMemoryDistributedRateLimiter`. Outbound HTTP dependencies (`KeycloakIdentityProviderService`) are isolated via Typed `HttpClient` profiles (`AddTradeFlowResiliencePipeline`) with a 5-stage Polly v8 pipeline (`TotalTimeout` -> `Bulkhead` -> `Retry` -> `CircuitBreaker` -> `AttemptTimeout`) and centralized `ResilienceHttpExecutor` mapping transient faults to `ErrorType.Unavailable` (`503 Service Unavailable`). All 137 automated tests passing with 0 warnings.
 
 ---
 
@@ -51,24 +51,25 @@ This document captures the real-time architectural baseline, active modules, tec
 - High-throughput event streaming (Phase 4 Active):
   - Apache Kafka integration (`Confluent.Kafka` v2.16.0) via `KafkaTopology` (`tradeflow.market.trades.v1` with 3 partitions + `tradeflow.market.trades.dlq`), `KafkaTradeStreamProducer` (Singleton thread-safe producer with `Acks.All`, `EnableIdempotence = true`, and `ProductId` Partition Key), `KafkaTradeStreamConsumerBackgroundService` (manual offset commit after processing + non-blocking Poison Pill routing to DLT), and `MarketTradeAnalyticsHandler` (ADR-0012).
 
-### 2.5 Active Observability & Tracing (Phase 7 Active)
-- OpenTelemetry .NET SDK with `TradeFlowDiagnostics` (`ActivitySource("TradeFlow")`).
-- Automatic instrumentations for ASP.NET Core, EF Core, Npgsql PostgreSQL, and StackExchange Redis.
+### 2.5 Active Observability, Tracing & Resilience (Phases 7 & 8 Active)
+- OpenTelemetry .NET SDK with `TradeFlowDiagnostics` (`ActivitySource("TradeFlow")`) and `Polly` activity source.
+- Automatic instrumentations for ASP.NET Core, EF Core, Npgsql PostgreSQL, and StackExchange Redis, plus custom exception event enrichment (`RecordError`).
 - W3C TraceContext propagation across persistence barrier (`orders.outbox_messages.trace_parent` and `trace_state`).
 - AMQP byte-array header injection/extraction for RabbitMQ and UTF-8 string header injection/extraction for Kafka.
 - OTLP Exporter over gRPC (`http://localhost:4317`) sending spans to Jaeger all-in-one container (`COLLECTOR_OTLP_ENABLED=true`), with Jaeger UI on `:16686` (ADR-0015).
+- Inbound `TradeFlowResilienceMiddleware` (Global Load Shedding + Distributed Multi-Tenant Rate Limiting via `RedisDistributedRateLimiter` Lua script with `InMemoryDistributedRateLimiter` Fail-Open fallback) and Outbound Polly v8 5-stage resilience pipelines via `AddTradeFlowResiliencePipeline` and `ResilienceHttpExecutor` (ADR-0016).
 
 ### 2.6 Active Infrastructure & DevOps
 - Docker Desktop installed for Testcontainers PostgreSQL, RabbitMQ, Kafka, and Redis integration tests (`[Trait("Category", "RequiresDocker")]`).
 - Local multi-container development environment via `docker-compose.yml` (PostgreSQL 16, RabbitMQ 4 with Management UI, pgAdmin 4, Apache Kafka 3.8 KRaft, Kafka UI, Redis 7 Alpine, Jaeger all-in-one).
 
 ### 2.7 Active Testing Infrastructure
-- Active (129 automated tests):
+- Active (137 automated tests):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
   - Unit/Application: NSubstitute, FluentAssertions (27 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering, CachingBehavior pipeline interceptor)
   - Architecture: NetArchTest.Rules (19 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation, infrastructure isolation, IModuleDbContext enforcement)
-  - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ, Kafka & Redis (31 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis distributed cache get/set/delete, stampede single-flight mutex protection under 50 concurrent requests, OpenTelemetry W3C traceparent outbox capture, and distributed tracing propagation)
-  - API Contract & E2E: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL (11 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits, Keycloak OAuth2/OIDC JWT authentication, RBAC authorization, and BOLA/IDOR tenant isolation)
+  - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ, Kafka & Redis (33 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis distributed cache get/set/delete, `ResultJsonConverterFactory` unwrapped DTO serialization, stampede single-flight mutex protection under 50 concurrent requests, multi-pod atomic Redis Lua rate limiting, OpenTelemetry W3C traceparent outbox capture, and distributed tracing propagation)
+  - API Contract, Security & Resilience: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL & `FakeTimeProvider` (17 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits, Keycloak OAuth2/OIDC JWT authentication, RBAC authorization, BOLA/IDOR tenant isolation, Polly v8 401 non-retry, 503 transient retry, Circuit Breaker full state machine with `FakeTimeProvider`, in-memory rate limiter window expiration, multi-tenant noisy neighbor 429 isolation, and 503 fail-fast when Keycloak is unreachable)
 
 ---
 
@@ -91,6 +92,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0013](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0013-identity-oauth2-oidc-rbac-and-tenant-isolation.md) | Stateless Federated Identity (OAuth2 / OIDC), RBAC & BOLA/IDOR Tenant Isolation | Accepted | 2026-10-30 |
 | [ADR-0014](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0014-distributed-caching-cache-aside-stampede-protection-and-pipeline-behavior.md) | Distributed Caching (Cache-Aside), Single-Flight Stampede Protection & MediatR Pipeline Behavior | Accepted | 2026-11-03 |
 | [ADR-0015](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0015-distributed-tracing-opentelemetry-w3c-outbox-propagation.md) | End-to-End Distributed Tracing with OpenTelemetry, W3C TraceContext, and Outbox Propagation | Accepted | 2026-11-03 |
+| [ADR-0016](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0016-resilience-rate-limiting-circuit-breaker-bulkhead.md) | Edge Rate Limiting, Load Shedding, and Outbound Resilience Pipelines with Polly v8 & Redis | Accepted | 2026-11-12 |
 
 ---
 
@@ -106,5 +108,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 7 End-to-End Distributed Tracing & Observability with OpenTelemetry (W3C TraceContext persistence in Outbox, RabbitMQ & Kafka header injection/extraction, ASP.NET Core, EF Core, Npgsql, Redis instrumentations, Jaeger OTLP, ADR-0015). 129/129 tests passing.
-- **Next Planned Learning Step**: Phase 8: Resilience & Fault Tolerance (Polly v8, Circuit Breakers, Bulkheads, Rate Limiting) OR Database Migrations & CI/CD Evolution.
+- **Immediate Completed Task**: Phase 8 Advanced Resilience, Fault Tolerance & Edge Protection (Polly v8 5-stage pipeline, Bulkhead, Circuit Breaker, `ResilienceHttpExecutor`, Load Shedding, Multi-Tenant Distributed Rate Limiting in Redis via Lua script with Fail-Open fallback, ADR-0016). 137/137 tests passing.
+- **Next Planned Learning Step**: Phase 9: Cloud-Native Readiness, Production Operations, Liveness/Readiness Health Checks, Graceful Shutdown, EF Core Migrations & CI/CD Pipeline.

@@ -44,6 +44,7 @@ public static class ResultExtensions
             ErrorType.Forbidden => (StatusCodes.Status403Forbidden, "Forbidden"),
             ErrorType.NotFound => (StatusCodes.Status404NotFound, "Not Found"),
             ErrorType.Conflict => (StatusCodes.Status409Conflict, "Conflict"),
+            ErrorType.Unavailable => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")
         };
 
@@ -52,11 +53,24 @@ public static class ResultExtensions
             ["code"] = error.Code
         };
 
-        return TypedResults.Problem(
+        var problemResult = TypedResults.Problem(
             statusCode: statusCode,
             title: title,
             detail: error.Description,
             type: $"https://tradeflow.com/errors/{error.Code.ToLowerInvariant().Replace('_', '-')}",
             extensions: extensions);
+
+        return error.Type == ErrorType.Unavailable
+            ? new ProblemWithRetryAfterResult(problemResult, retryAfterSeconds: 15)
+            : problemResult;
+    }
+
+    private sealed class ProblemWithRetryAfterResult(IResult innerResult, int retryAfterSeconds) : IResult
+    {
+        public Task ExecuteAsync(HttpContext httpContext)
+        {
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+            return innerResult.ExecuteAsync(httpContext);
+        }
     }
 }

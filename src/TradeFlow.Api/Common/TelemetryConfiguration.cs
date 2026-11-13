@@ -28,6 +28,7 @@ public static class TelemetryConfiguration
             {
                 tracing
                     .AddSource(TradeFlowDiagnostics.ActivitySourceName)
+                    .AddSource("Polly")
                     .AddAspNetCoreInstrumentation(options =>
                     {
                         options.RecordException = true;

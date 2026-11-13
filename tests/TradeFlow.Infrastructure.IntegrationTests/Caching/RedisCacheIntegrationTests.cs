@@ -164,5 +164,41 @@ public class RedisCacheIntegrationTests : IAsyncLifetime
         rawJson.Should().NotContain("\"isSuccess\":");
     }
 
+    [Fact]
+    public async Task RedisDistributedRateLimiter_AcrossMultiplePodInstances_ShouldCoordinateAtomicCounterInRedis()
+    {
+        // Arrange: Two separate limiter instances simulating Pod 1 and Pod 2 connected to the same Redis cluster (ADR-0016)
+        var pod1Limiter = new RedisDistributedRateLimiter(_connectionMultiplexer, NullLogger<RedisDistributedRateLimiter>.Instance);
+        var pod2Limiter = new RedisDistributedRateLimiter(_connectionMultiplexer, NullLogger<RedisDistributedRateLimiter>.Instance);
+
+        var tenantAlphaKey = $"tenant:{Guid.NewGuid()}";
+        var tenantBetaKey = $"tenant:{Guid.NewGuid()}";
+        const int permitLimit = 6;
+        var window = TimeSpan.FromSeconds(30);
+
+        // Act: 3 requests hit Pod 1 and 3 requests hit Pod 2 for Tenant Alpha (total = 6)
+        for (var i = 0; i < 3; i++)
+        {
+            var r1 = await pod1Limiter.TryAcquireAsync(tenantAlphaKey, permitLimit, window);
+            var r2 = await pod2Limiter.TryAcquireAsync(tenantAlphaKey, permitLimit, window);
+            r1.IsAllowed.Should().BeTrue();
+            r2.IsAllowed.Should().BeTrue();
+        }
+
+        // 7th request for Tenant Alpha on Pod 2 must be rejected because Redis coordinated the counter across both pods!
+        var rejectedLease = await pod2Limiter.TryAcquireAsync(tenantAlphaKey, permitLimit, window);
+
+        // Meanwhile, Tenant Beta on Pod 1 is completely unaffected (Noisy Neighbor isolation)
+        var tenantBetaLease = await pod1Limiter.TryAcquireAsync(tenantBetaKey, permitLimit, window);
+
+        // Assert
+        rejectedLease.IsAllowed.Should().BeFalse("7th request across pods exceeds permitLimit of 6");
+        rejectedLease.CurrentCount.Should().Be(7);
+        rejectedLease.RetryAfter.Should().BeGreaterThan(TimeSpan.Zero);
+
+        tenantBetaLease.IsAllowed.Should().BeTrue("Tenant Beta must remain isolated from Tenant Alpha's rate limit exhaustion");
+        tenantBetaLease.CurrentCount.Should().Be(1);
+    }
+
     private sealed record TestOrderSummary(Guid OrderId, string Currency, decimal Total);
 }

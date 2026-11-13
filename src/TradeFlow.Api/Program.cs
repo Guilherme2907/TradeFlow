@@ -1,6 +1,7 @@
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TradeFlow.Api.Common;
+using TradeFlow.Api.Common.Resilience;
 using TradeFlow.Api.Common.Security;
 using TradeFlow.Api.Endpoints;
 using TradeFlow.Application;
@@ -38,6 +39,7 @@ builder.Services.AddOpenApi(options =>
 });
 builder.Services.AddTradeFlowSecurity(builder.Configuration);
 builder.Services.AddTradeFlowTelemetry(builder.Configuration);
+builder.Services.AddTradeFlowResilience(builder.Configuration);
 
 // Clean Architecture layers
 builder.Services.AddApplication();
@@ -62,6 +64,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseTradeFlowResilience();
 app.UseAuthorization();
 
 // Map feature-oriented endpoint groups
