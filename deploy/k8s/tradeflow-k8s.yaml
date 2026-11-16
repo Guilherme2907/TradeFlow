@@ -1,0 +1,136 @@
+# ==============================================================================
+# TradeFlow Kubernetes Production Manifests (ADR-0017)
+# Contains: ConfigMap, Deployment (Zero-Downtime RollingUpdate, Probes, SIGTERM),
+#           Service (Internal Load Balancer), and HorizontalPodAutoscaler (HPA)
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tradeflow-config
+  namespace: default
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  Host__ShutdownTimeoutSeconds: "25"
+  # Standard OpenTelemetry environment variable read by TelemetryConfiguration.cs.
+  # Example cluster-internal DNS: <service-name>.<namespace>.svc.cluster.local
+  # (For local Docker Desktop testing with docker-compose Jaeger, override to: http://host.docker.internal:4317)
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:4317"
+  Resilience__LoadShedding__MaxConcurrentRequests: "200"
+  Resilience__RateLimiting__TenantPermitLimit: "100"
+  Resilience__RateLimiting__AuthPermitLimit: "15"
+  Resilience__RateLimiting__WindowSeconds: "60"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tradeflow-api
+  namespace: default
+  labels:
+    app: tradeflow-api
+spec:
+  replicas: 3
+  # Zero-Downtime Rolling Update Strategy:
+  # maxUnavailable: 0 guarantees we never drop below 3 healthy pods during a deploy.
+  # maxSurge: 1 spins up 1 new pod first, waits for /health/ready to return 200 OK,
+  # and only then sends SIGTERM to 1 old pod!
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: tradeflow-api
+  template:
+    metadata:
+      labels:
+        app: tradeflow-api
+    spec:
+      # Grants the pod 30 seconds after SIGTERM before sending SIGKILL.
+      # Matches our .NET HostOptions.ShutdownTimeout = 25s (plus a 5s safety buffer).
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: tradeflow-api
+          image: ghcr.io/tradeflow/tradeflow-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tradeflow-config
+          # Resource Requests (for scheduler placement) & Limits (to prevent noisy pod OOM)
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          # 1. Startup Probe: Gives the .NET process time to warm up JIT on cold start
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            failureThreshold: 15
+            periodSeconds: 2
+          # 2. Liveness Probe: ONLY checks if the Kestrel process is responsive.
+          # Never checks PostgreSQL/Redis to prevent cascading restart storms!
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # 3. Readiness Probe: Verifies PostgreSQL (Unhealthy/503 if down) and Redis (Degraded/200 if down).
+          # If PostgreSQL is unreachable, Kubernetes removes this pod from the Service load balancer without restarting it.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tradeflow-api-svc
+  namespace: default
+  labels:
+    app: tradeflow-api
+spec:
+  type: ClusterIP
+  selector:
+    app: tradeflow-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tradeflow-api-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tradeflow-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

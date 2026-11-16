@@ -62,14 +62,19 @@ This document captures the real-time architectural baseline, active modules, tec
 ### 2.6 Active Infrastructure & DevOps
 - Docker Desktop installed for Testcontainers PostgreSQL, RabbitMQ, Kafka, and Redis integration tests (`[Trait("Category", "RequiresDocker")]`).
 - Local multi-container development environment via `docker-compose.yml` (PostgreSQL 16, RabbitMQ 4 with Management UI, pgAdmin 4, Apache Kafka 3.8 KRaft, Kafka UI, Redis 7 Alpine, Jaeger all-in-one).
+- Cloud-Native Containerization & Kubernetes (ADR-0017):
+  - Multi-stage, non-root (`USER $APP_UID`) production Alpine [`Dockerfile`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/Dockerfile) with layer-cached NuGet dependencies.
+  - Production Kubernetes manifests ([`deploy/k8s/tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml)) and local dev manifests ([`deploy/k8s/tradeflow-local.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-local.yaml)) specifying Liveness (`/health/live`) and Readiness (`/health/ready`) probes, zero-downtime RollingUpdate (`maxUnavailable: 0`, `maxSurge: 1`), PodDisruptionBudgets, and HorizontalPodAutoscalers.
+  - Multi-schema EF Core migrations with dedicated history tables (`orders."__EFMigrationsHistory"` and `inventory."__EFMigrationsHistory"`) applied at container startup via [`DatabaseBootstrap.cs`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/src/TradeFlow.Api/Common/DatabaseBootstrap.cs).
+  - 3-stage GitHub Actions CI/CD Pipeline ([`.github/workflows/ci-cd.yml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/.github/workflows/ci-cd.yml)) enforcing `-warnaserror`, fast Unit/Arch tests, real Testcontainers suite, and Docker image build.
 
 ### 2.7 Active Testing Infrastructure
-- Active (137 automated tests):
+- Active (141 automated tests):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
   - Unit/Application: NSubstitute, FluentAssertions (27 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering, CachingBehavior pipeline interceptor)
   - Architecture: NetArchTest.Rules (19 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation, infrastructure isolation, IModuleDbContext enforcement)
   - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ, Kafka & Redis (33 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis distributed cache get/set/delete, `ResultJsonConverterFactory` unwrapped DTO serialization, stampede single-flight mutex protection under 50 concurrent requests, multi-pod atomic Redis Lua rate limiting, OpenTelemetry W3C traceparent outbox capture, and distributed tracing propagation)
-  - API Contract, Security & Resilience: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL & `FakeTimeProvider` (17 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits, Keycloak OAuth2/OIDC JWT authentication, RBAC authorization, BOLA/IDOR tenant isolation, Polly v8 401 non-retry, 503 transient retry, Circuit Breaker full state machine with `FakeTimeProvider`, in-memory rate limiter window expiration, multi-tenant noisy neighbor 429 isolation, and 503 fail-fast when Keycloak is unreachable)
+  - API Contract, Security, Resilience & Cloud-Native Health: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL & `FakeTimeProvider` (21 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits, Keycloak OAuth2/OIDC JWT authentication, RBAC authorization, BOLA/IDOR tenant isolation, Polly v8 401 non-retry, 503 transient retry, Circuit Breaker full state machine with `FakeTimeProvider`, in-memory rate limiter window expiration, multi-tenant noisy neighbor 429 isolation, 503 fail-fast when Keycloak is unreachable, Liveness probe isolation when database is down, Readiness 503 failure on database outage, Readiness 200 on healthy database, and Graceful Shutdown 25s timeout configuration)
 
 ---
 
@@ -93,6 +98,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0014](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0014-distributed-caching-cache-aside-stampede-protection-and-pipeline-behavior.md) | Distributed Caching (Cache-Aside), Single-Flight Stampede Protection & MediatR Pipeline Behavior | Accepted | 2026-11-03 |
 | [ADR-0015](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0015-distributed-tracing-opentelemetry-w3c-outbox-propagation.md) | End-to-End Distributed Tracing with OpenTelemetry, W3C TraceContext, and Outbox Propagation | Accepted | 2026-11-03 |
 | [ADR-0016](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0016-resilience-rate-limiting-circuit-breaker-bulkhead.md) | Edge Rate Limiting, Load Shedding, and Outbound Resilience Pipelines with Polly v8 & Redis | Accepted | 2026-11-12 |
+| [ADR-0017](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0017-cloud-native-readiness-health-probes-graceful-shutdown-migrations-cicd.md) | Cloud-Native Readiness: Liveness/Readiness Probes, Graceful Shutdown, Multi-Schema EF Core Migrations, Multi-Stage Containerization & CI/CD | Accepted | 2026-11-16 |
 
 ---
 
@@ -102,11 +108,11 @@ This document captures the real-time architectural baseline, active modules, tec
 | :--- | :--- | :--- |
 | Single Database Transaction across Use Case | Accepted per ADR-0002 to avoid premature distributed outbox/messaging complexity in Phase 1/2. | Resolved in Phase 3 (Outbox & RabbitMQ) |
 | In-Memory Inventory Fake | Replaced with full `InventoryItem` aggregate root, `IInventoryRepository`, `IInventoryModule`, and PostgreSQL schema isolation (`inventory.inventory_items`). | Resolved (Phase 2) |
-| DatabaseBootstrap Runtime Schema Initialization | Pragmatic local development and test bootstrap via `RelationalDatabaseCreator.CreateTablesAsync()`. | Target resolution in CI/CD & Deployment Migrations Phase |
+| DatabaseBootstrap Runtime Schema Initialization | Replaced runtime `CreateTablesAsync()` with automated EF Core multi-schema migrations with isolated history tables (`orders."__EFMigrationsHistory"`, `inventory."__EFMigrationsHistory"`). | Resolved in Phase 9 (ADR-0017) |
 
 ---
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 8 Advanced Resilience, Fault Tolerance & Edge Protection (Polly v8 5-stage pipeline, Bulkhead, Circuit Breaker, `ResilienceHttpExecutor`, Load Shedding, Multi-Tenant Distributed Rate Limiting in Redis via Lua script with Fail-Open fallback, ADR-0016). 137/137 tests passing.
-- **Next Planned Learning Step**: Phase 9: Cloud-Native Readiness, Production Operations, Liveness/Readiness Health Checks, Graceful Shutdown, EF Core Migrations & CI/CD Pipeline.
+- **Immediate Completed Task**: Phase 9 Cloud-Native Readiness, Kubernetes Probes, Graceful Shutdown, Multi-Schema EF Core Migrations & CI/CD (ADR-0017). Local Kubernetes cluster deployed on Docker Desktop with 3 replicas and verified against live PostgreSQL, Redis, Keycloak, RabbitMQ, Kafka and Jaeger. 141/141 automated tests passing.
+- **Next Planned Learning Step**: Phase 10: Performance Benchmarking, Load Testing & Capacity Planning (k6 load scripts, connection pool tuning, p95/p99 latency analysis under high concurrency) or Capstone Architecture Defense.

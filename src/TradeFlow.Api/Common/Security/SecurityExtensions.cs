@@ -40,6 +40,7 @@ public static class SecurityExtensions
                 {
                     ValidateIssuer = true,
                     ValidIssuer = authority,
+                    ValidIssuers = [authority, "http://localhost:8080/realms/tradeflow", "http://host.docker.internal:8080/realms/tradeflow"],
                     ValidateAudience = true,
                     ValidAudiences = [audience, "account"],
                     ValidateLifetime = true,

@@ -201,11 +201,11 @@ public static class DependencyInjection
         services.AddScoped<DbConnection>(_ => new NpgsqlConnection(connectionString));
 
         services.AddModuleDbContext<OrdersDbContext>((sp, options) =>
-            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(OrdersDbContext), configureNpgsql))
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(OrdersDbContext), "orders", configureNpgsql))
                    .AddInterceptors(sp.GetRequiredService<DomainEventsToOutboxMessagesInterceptor>()));
 
         services.AddModuleDbContext<InventoryDbContext>((sp, options) =>
-            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(InventoryDbContext), configureNpgsql)));
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(InventoryDbContext), "inventory", configureNpgsql)));
 
         return services;
     }
@@ -213,9 +213,11 @@ public static class DependencyInjection
     private static void ConfigureNpgsql(
         NpgsqlDbContextOptionsBuilder npgsql,
         Type contextType,
+        string schema,
         Action<NpgsqlDbContextOptionsBuilder>? extra)
     {
         npgsql.MigrationsAssembly(contextType.Assembly.FullName);
+        npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema);
         extra?.Invoke(npgsql);
     }
 

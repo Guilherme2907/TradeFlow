@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
 using TradeFlow.Domain.Common;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
@@ -9,8 +7,10 @@ using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 namespace TradeFlow.Api.Common;
 
 /// <summary>
-/// Development helper that ensures PostgreSQL schemas (orders, inventory) and tables exist,
+/// Development helper that applies EF Core schema migrations for each module (<c>orders</c> and <c>inventory</c>)
 /// and seeds initial inventory data so orders can be placed and tested locally without manual SQL scripts.
+/// Note: In Production (Kubernetes / Cloud), migrations are executed via CI/CD Migration Bundles or Init Jobs,
+/// never concurrently inside <c>Program.cs</c> across scaling pods (ADR-0017).
 /// </summary>
 public static class DatabaseBootstrap
 {
@@ -48,37 +48,28 @@ public static class DatabaseBootstrap
             return;
         }
 
-        logger.LogInformation("Ensuring PostgreSQL schemas and tables exist for development...");
+        logger.LogInformation("Applying PostgreSQL EF Core migrations for Orders and Inventory schemas (ADR-0017)...");
 
         // 1. Ensure schemas exist
         await ordersContext.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS orders;");
         await ordersContext.Database.ExecuteSqlRawAsync("CREATE SCHEMA IF NOT EXISTS inventory;");
 
-        // 2. Ensure Orders tables exist
-        var ordersTableExists = await TableExistsAsync(ordersContext, "orders", "orders");
-        if (!ordersTableExists)
-        {
-            logger.LogInformation("Creating tables for Orders module (orders schema)...");
-            var ordersCreator = (RelationalDatabaseCreator)ordersContext.Database.GetService<IDatabaseCreator>();
-            await ordersCreator.CreateTablesAsync();
-        }
-        else
-        {
-            // Ensure outbox_messages table has trace context columns on existing databases (ADR-0015)
-            await ordersContext.Database.ExecuteSqlRawAsync(@"
-                ALTER TABLE orders.outbox_messages ADD COLUMN IF NOT EXISTS trace_parent VARCHAR(256);
-                ALTER TABLE orders.outbox_messages ADD COLUMN IF NOT EXISTS trace_state VARCHAR(512);
-            ");
-        }
+        // 2. Baseline existing local Docker development databases created prior to Phase 9 EF Core Migrations
+        await BaselineLegacySchemaIfTablesAlreadyExistAsync(
+            ordersContext,
+            schema: "orders",
+            markerTable: "orders",
+            initialMigrationId: "20261113213001_InitialOrdersSchema");
 
-        // 3. Ensure Inventory tables exist
-        var inventoryTableExists = await TableExistsAsync(inventoryContext, "inventory", "inventory_items");
-        if (!inventoryTableExists)
-        {
-            logger.LogInformation("Creating tables for Inventory module (inventory schema)...");
-            var inventoryCreator = (RelationalDatabaseCreator)inventoryContext.Database.GetService<IDatabaseCreator>();
-            await inventoryCreator.CreateTablesAsync();
-        }
+        await BaselineLegacySchemaIfTablesAlreadyExistAsync(
+            inventoryContext,
+            schema: "inventory",
+            markerTable: "inventory_items",
+            initialMigrationId: "20261113213006_InitialInventorySchema");
+
+        // 3. Apply pending EF Core migrations per module DbContext
+        await ordersContext.Database.MigrateAsync();
+        await inventoryContext.Database.MigrateAsync();
 
         // 4. Seed initial inventory items if table is empty
         var hasInventoryItems = await inventoryContext.InventoryItems.AnyAsync();
@@ -105,7 +96,32 @@ public static class DatabaseBootstrap
                 SeedProductId2);
         }
 
-        logger.LogInformation("Development database initialization complete.");
+        logger.LogInformation("Development database migration and seed complete.");
+    }
+
+    private static async Task BaselineLegacySchemaIfTablesAlreadyExistAsync(
+        DbContext context,
+        string schema,
+        string markerTable,
+        string initialMigrationId)
+    {
+        var tableExists = await TableExistsAsync(context, schema, markerTable);
+        var historyExists = await TableExistsAsync(context, schema, "__EFMigrationsHistory");
+
+        if (tableExists && !historyExists)
+        {
+            var createHistorySql = $"""
+                CREATE TABLE IF NOT EXISTS {schema}."__EFMigrationsHistory" (
+                    "MigrationId" character varying(150) NOT NULL,
+                    "ProductVersion" character varying(32) NOT NULL,
+                    CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
+                );
+                INSERT INTO {schema}."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ('{initialMigrationId}', '10.0.4')
+                ON CONFLICT DO NOTHING;
+                """;
+            await context.Database.ExecuteSqlRawAsync(createHistorySql);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(DbContext context, string schema, string table)

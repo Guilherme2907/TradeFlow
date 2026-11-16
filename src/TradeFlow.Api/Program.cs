@@ -1,6 +1,7 @@
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using TradeFlow.Api.Common;
+using TradeFlow.Api.Common.Health;
 using TradeFlow.Api.Common.Resilience;
 using TradeFlow.Api.Common.Security;
 using TradeFlow.Api.Endpoints;
@@ -40,6 +41,7 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddTradeFlowSecurity(builder.Configuration);
 builder.Services.AddTradeFlowTelemetry(builder.Configuration);
 builder.Services.AddTradeFlowResilience(builder.Configuration);
+builder.Services.AddTradeFlowHealthChecks(builder.Configuration);
 
 // Clean Architecture layers
 builder.Services.AddApplication();
@@ -67,7 +69,8 @@ app.UseAuthentication();
 app.UseTradeFlowResilience();
 app.UseAuthorization();
 
-// Map feature-oriented endpoint groups
+// Map Cloud-Native Kubernetes Health Probes & feature-oriented endpoint groups
+app.MapTradeFlowHealthChecks();
 app.MapAuthEndpoints();
 app.MapOrderEndpoints();
 
