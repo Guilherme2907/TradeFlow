@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMQ.Client;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
 using TradeFlow.Domain.Common;
@@ -128,7 +129,7 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         }
 
         // Assert 2: "payments.order-submitted" queue received ONLY the OrderSubmittedEvent
-        var paymentDelivery = await setupChannel.BasicGetAsync(paymentsQueue, autoAck: true);
+        var paymentDelivery = await WaitForMessageAsync(setupChannel, paymentsQueue, autoAck: true);
         paymentDelivery.Should().NotBeNull();
         paymentDelivery!.BasicProperties.MessageId.Should().Be(submittedOutboxId.ToString());
         paymentDelivery.BasicProperties.Type.Should().Be(nameof(OrderSubmittedEvent));
@@ -146,7 +147,7 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         var auditEvents = new List<string?>();
         for (var i = 0; i < 3; i++)
         {
-            var delivery = await setupChannel.BasicGetAsync(auditQueue, autoAck: true);
+            var delivery = await WaitForMessageAsync(setupChannel, auditQueue, autoAck: true);
             delivery.Should().NotBeNull();
             auditEvents.Add(delivery!.BasicProperties.Type);
         }
@@ -183,7 +184,7 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         }
 
         // Act: Consumer reads message with autoAck: false and rejects it with BasicNackAsync(requeue: false)
-        var delivery = await channel.BasicGetAsync(consumerQueue, autoAck: false);
+        var delivery = await WaitForMessageAsync(channel, consumerQueue, autoAck: false);
         delivery.Should().NotBeNull();
 
         await channel.BasicNackAsync(
@@ -191,8 +192,9 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
             multiple: false,
             requeue: false);
 
-        // Assert: RabbitMQ Dead-Letter Exchange (DLX) automatically routes the rejected message to the DLQ
-        var dlqDelivery = await channel.BasicGetAsync(expectedDlqName, autoAck: true);
+        // Assert: RabbitMQ Dead-Letter Exchange (DLX) automatically routes the rejected message to the DLQ.
+        // We poll via WaitForMessageAsync to accommodate non-zero broker routing latency under CI load.
+        var dlqDelivery = await WaitForMessageAsync(channel, expectedDlqName, autoAck: true);
         dlqDelivery.Should().NotBeNull("Rejected message with requeue: false must be routed to the Dead-Letter Queue");
         dlqDelivery!.BasicProperties.MessageId.Should().Be(messageId.ToString());
         Encoding.UTF8.GetString(dlqDelivery.Body.ToArray()).Should().Contain("test-dlq");
@@ -342,8 +344,8 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         }
 
         // Assert 2: The message was NACKed (requeue: false) and landed in the Dead-Letter Queue
-        var dlqDelivery = await channel.BasicGetAsync(expectedDlqName, autoAck: true);
-        dlqDelivery.Should().NotBeNull();
+        var dlqDelivery = await WaitForMessageAsync(channel, expectedDlqName, autoAck: true);
+        dlqDelivery.Should().NotBeNull("Failed message with requeue: false must be routed to the Dead-Letter Queue");
         dlqDelivery!.BasicProperties.MessageId.Should().Be(failingMessageId.ToString());
     }
 
@@ -445,5 +447,32 @@ public class RabbitMqOutboxIntegrationTests : IAsyncLifetime
         {
             await consumerWorker.StopAsync(CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Resilient polling helper that fetches messages from RabbitMQ queues with a timeout deadline,
+    /// avoiding flaky assertions caused by asynchronous broker-side Dead-Letter Exchange (DLX) routing delays under heavy CI load.
+    /// </summary>
+    private static async Task<BasicGetResult?> WaitForMessageAsync(
+        IChannel channel,
+        string queueName,
+        bool autoAck = true,
+        TimeSpan? timeout = null)
+    {
+        var maxTimeout = timeout ?? TimeSpan.FromSeconds(5);
+        var deadline = DateTimeOffset.UtcNow + maxTimeout;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var result = await channel.BasicGetAsync(queueName, autoAck);
+            if (result is not null)
+            {
+                return result;
+            }
+
+            await Task.Delay(50);
+        }
+
+        return null;
     }
 }

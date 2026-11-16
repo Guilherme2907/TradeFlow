@@ -70,7 +70,7 @@ Testing is a primary engineering axis. Each level is tracked independently to en
 | **3. API Testing** | `Strong` | Yes (Phase 1–2, 9) | — | Emulator divergence vs production parity | RFC 7807 contracts, HTTP status codes, real PostgreSQL commits, Liveness isolation, Readiness 503/200 probes | 2026-11-16 |
 | **4. Contract Testing** | `Not Started` | No (Phase 3–4) | — | — | — | — |
 | **5. End-to-End (E2E) Testing** | `Not Started` | No (Phase 6) | — | — | — | — |
-| **6. Messaging Testing** | `Strong` | Yes (Phase 3) | — | Flaky assertions caused by microsecond clock resolution | RabbitMQ Topic routing, Publisher Confirms, DLQ routing, Push Consumers, Inbox deduplication | 2026-10-21 |
+| **6. Messaging Testing** | `Strong` | Yes (Phase 3, 9) | — | Flaky assertions caused by microsecond clock resolution & instantaneous BasicGet without broker DLX routing polling | RabbitMQ Topic routing, Publisher Confirms, DLQ routing, Push Consumers, Inbox deduplication | 2026-11-16 |
 | **7. Resilience Testing** | `Strong` | Yes (Phase 3 & 8) | — | Poison message simulation, DLQ routing | Outbox retries, consumer NACK without requeue, dead-letter routing, deterministic Circuit Breaker state machine testing with `FakeTimeProvider`, multi-tenant 429 isolation | 2026-11-13 |
 | **8. Security Testing** | `Strong` | Yes (Phase 5) | — | Trusting tenant IDs from client JSON bodies | `401 Unauthorized` vs `403 Forbidden`, RBAC policy assertions, cross-tenant BOLA/IDOR attack simulation with real `RS256` JWTs | 2026-10-30 |
 | **9. Performance Testing** | `Not Started` | No (Phase 10) | — | — | — | — |

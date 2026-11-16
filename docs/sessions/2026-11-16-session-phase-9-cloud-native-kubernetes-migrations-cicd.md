@@ -118,6 +118,11 @@
    - **Observed Behavior**: `RabbitMqConsumerBackgroundService` crashed on `localhost:5672` in-container, causing pod CrashLoopBackOff.
    - **Resolution**: Set `ConnectionStrings__RabbitMq` and other broker strings to `host.docker.internal` in local manifest.
 
+3. **Failure Investigated**: CI Pipeline Stage 2 flaky failure in `RabbitMqOutboxIntegrationTests.ConsumerNackWithoutRequeue_WhenMessageIsRejected_ShouldRouteMessageToDeadLetterQueue`.
+   - **Observed Behavior**: `Expected dlqDelivery not to be <null> because Rejected message with requeue: false must be routed to the Dead-Letter Queue` after 62ms execution.
+   - **Root Cause**: `BasicNackAsync(..., requeue: false)` dispatches an asynchronous client frame to RabbitMQ. Unlike Publisher Confirms, consumer rejection has no broker acknowledgment confirming DLX delivery completion. The broker routes to the Dead-Letter Queue asynchronously. Calling `BasicGetAsync` immediately with zero wait time triggers a race condition under CPU-constrained CI virtual machines.
+   - **Resolution**: Implemented `WaitForMessageAsync` polling helper with a 5-second deadline and 50ms interval, guaranteeing deterministic assertions under asynchronous broker latency.
+
 ---
 
 ## 9. Next Learning Step
