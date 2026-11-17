@@ -100,6 +100,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
     volumes:
       - ./docker/keycloak/tradeflow-realm.json:/opt/keycloak/data/import/tradeflow-realm.json:ro
+      - ./docker/keycloak/themes/tradeflow:/opt/keycloak/themes/tradeflow:ro
 
   redis:
     image: redis:7-alpine

@@ -67,14 +67,18 @@ This document captures the real-time architectural baseline, active modules, tec
   - Production Kubernetes manifests ([`deploy/k8s/tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml)) and local dev manifests ([`deploy/k8s/tradeflow-local.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-local.yaml)) specifying Liveness (`/health/live`) and Readiness (`/health/ready`) probes, zero-downtime RollingUpdate (`maxUnavailable: 0`, `maxSurge: 1`), PodDisruptionBudgets, and HorizontalPodAutoscalers.
   - Multi-schema EF Core migrations with dedicated history tables (`orders."__EFMigrationsHistory"` and `inventory."__EFMigrationsHistory"`) applied at container startup via [`DatabaseBootstrap.cs`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/src/TradeFlow.Api/Common/DatabaseBootstrap.cs).
   - 3-stage GitHub Actions CI/CD Pipeline ([`.github/workflows/ci-cd.yml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/.github/workflows/ci-cd.yml)) enforcing `-warnaserror`, fast Unit/Arch tests, real Testcontainers suite, and Docker image build.
+- Frontend SPA & White-Label SSO (`src/TradeFlow.Web`, ADR-0018):
+  - Vite + React 19 + TypeScript SPA featuring OAuth2 PKCE (`S256`) in-memory token storage (`InMemoryWebStorage` via `oidc-client-ts`), TanStack Query server-state caching, RFC 7807 `ProblemDetails` error parsing, and strict API CORS allowlist (`TradeFlowCorsPolicy`).
+  - Custom Keycloak FreeMarker login/error theme (`docker/keycloak/themes/tradeflow`) sharing identical CSS Design Tokens (`tokens.css`) and brand mark for visually seamless SSO redirection via public client `tradeflow-web`.
 
 ### 2.7 Active Testing Infrastructure
-- Active (141 automated tests):
+- Active (151 backend tests + 5 frontend Vitest tests + 1 Playwright E2E spec):
   - Unit/Domain: xUnit, FluentAssertions (41 tests: Order lifecycle, Money arithmetic, InventoryItem invariants, AggregateRoot temporal audit tracking)
-  - Unit/Application: NSubstitute, FluentAssertions (27 tests: Command handlers, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering, CachingBehavior pipeline interceptor)
+  - Unit/Application: NSubstitute, FluentAssertions (31 tests: Command/Query handlers including `GetOrders` tenant-scoping & `GetInventoryItems`, Validation behaviors, InventoryModule atomic reservation, deterministic lock ordering, CachingBehavior pipeline interceptor)
   - Architecture: NetArchTest.Rules (19 tests: Inward layer dependency flow, entity encapsulation, Anti-Backdoor rule, inter-module bounded context isolation, infrastructure isolation, IModuleDbContext enforcement)
-  - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ, Kafka & Redis (33 tests: Order persistence, OCC rowversion verification, InventoryItem persistence, hot SKU high-concurrency contention without OCC exceptions, multi-item opposing order deadlock prevention, cross-context atomic commit, business failure rollback, database exception fail-fast rollback, outbox message atomic persistence, outbox rollback isolation, outbox state mutations, outbox batch processing, poison message isolation after max retries, concurrent multi-worker `SKIP LOCKED` disjoint batching, RabbitMQ Topic Exchange exact/wildcard routing with Publisher Confirms, Consumer NACK Dead-Letter Queue routing, push-based consumer dispatch and inbox deduplication, Kafka deterministic Partition Key routing, strict chronological consumption per ProductId, non-blocking Poison Pill DLT isolation, Redis distributed cache get/set/delete, `ResultJsonConverterFactory` unwrapped DTO serialization, stampede single-flight mutex protection under 50 concurrent requests, multi-pod atomic Redis Lua rate limiting, OpenTelemetry W3C traceparent outbox capture, and distributed tracing propagation)
-  - API Contract, Security, Resilience & Cloud-Native Health: Microsoft.AspNetCore.Mvc.Testing (`WebApplicationFactory`), Testcontainers PostgreSQL & `FakeTimeProvider` (21 tests: HTTP contracts, RFC 7807 problem details, full lifecycle with real cross-context database commits, Keycloak OAuth2/OIDC JWT authentication, RBAC authorization, BOLA/IDOR tenant isolation, Polly v8 401 non-retry, 503 transient retry, Circuit Breaker full state machine with `FakeTimeProvider`, in-memory rate limiter window expiration, multi-tenant noisy neighbor 429 isolation, 503 fail-fast when Keycloak is unreachable, Liveness probe isolation when database is down, Readiness 503 failure on database outage, Readiness 200 on healthy database, and Graceful Shutdown 25s timeout configuration)
+  - Infrastructure Integration: Testcontainers for PostgreSQL, RabbitMQ, Kafka & Redis (35 tests: 29 Docker + 6 non-Docker)
+  - API Contract, Security, Resilience, CORS & Cloud-Native Health: `WebApplicationFactory`, Testcontainers PostgreSQL & `FakeTimeProvider` (25 tests: 13 Docker + 12 non-Docker including strict CORS origin allowlisting, multi-tenant `GET /api/orders`, `GET /api/inventory`, and health probes)
+  - Frontend Unit/Component & E2E: Vitest + React Testing Library (5 tests covering RFC 7807 ProblemDetails parsing, RBAC UI visibility, and 409 conflict banner) + Playwright E2E spec (`e2e/sso-order-flow.spec.ts` scaffolded for full browser SSO & order lifecycle verification).
 
 ---
 
@@ -99,6 +103,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0015](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0015-distributed-tracing-opentelemetry-w3c-outbox-propagation.md) | End-to-End Distributed Tracing with OpenTelemetry, W3C TraceContext, and Outbox Propagation | Accepted | 2026-11-03 |
 | [ADR-0016](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0016-resilience-rate-limiting-circuit-breaker-bulkhead.md) | Edge Rate Limiting, Load Shedding, and Outbound Resilience Pipelines with Polly v8 & Redis | Accepted | 2026-11-12 |
 | [ADR-0017](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0017-cloud-native-readiness-health-probes-graceful-shutdown-migrations-cicd.md) | Cloud-Native Readiness: Liveness/Readiness Probes, Graceful Shutdown, Multi-Schema EF Core Migrations, Multi-Stage Containerization & CI/CD | Accepted | 2026-11-16 |
+| [ADR-0018](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0018-frontend-architecture-spa-pkce-white-label-keycloak-testing.md) | Frontend SPA Architecture, OAuth2 PKCE In-Memory Auth, White-Label Keycloak Theme & Testing Pyramid | Accepted | 2026-11-16 |
 
 ---
 
@@ -109,10 +114,11 @@ This document captures the real-time architectural baseline, active modules, tec
 | Single Database Transaction across Use Case | Accepted per ADR-0002 to avoid premature distributed outbox/messaging complexity in Phase 1/2. | Resolved in Phase 3 (Outbox & RabbitMQ) |
 | In-Memory Inventory Fake | Replaced with full `InventoryItem` aggregate root, `IInventoryRepository`, `IInventoryModule`, and PostgreSQL schema isolation (`inventory.inventory_items`). | Resolved (Phase 2) |
 | DatabaseBootstrap Runtime Schema Initialization | Replaced runtime `CreateTablesAsync()` with automated EF Core multi-schema migrations with isolated history tables (`orders."__EFMigrationsHistory"`, `inventory."__EFMigrationsHistory"`). | Resolved in Phase 9 (ADR-0017) |
+| Keycloak Login Quick-Fill Sandbox Buttons & Unverified E2E Suite | `login.ftl` includes quick-fill sandbox buttons for dev convenience, and Playwright E2E (`sso-order-flow.spec.ts`) is scaffolded pending Chromium execution & developer React fundamentals review. | Before Production / Capstone |
 
 ---
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 9 Cloud-Native Readiness, Kubernetes Probes, Graceful Shutdown, Multi-Schema EF Core Migrations & CI/CD (ADR-0017). Local Kubernetes cluster deployed on Docker Desktop with 3 replicas and verified against live PostgreSQL, Redis, Keycloak, RabbitMQ, Kafka and Jaeger. 141/141 automated tests passing.
-- **Next Planned Learning Step**: Phase 10: Performance Benchmarking, Load Testing & Capacity Planning (k6 load scripts, connection pool tuning, p95/p99 latency analysis under high concurrency) or Capstone Architecture Defense.
+- **Immediate Completed Task**: Phase 10 Frontend Architecture Baseline, Transparent Keycloak White-Label SSO (`tradeflow-web` PKCE + `loginTheme: tradeflow` + shared `tokens.css`), Backend Read APIs (`GET /api/orders`, `GET /api/inventory`) + Strict CORS Allowlist (`ADR-0018`). Verified end-to-end manually in browser (Keycloak SSO redirect -> Dashboard -> Order lifecycle).
+- **Next Planned Learning Step**: Phase 11 — Choose between **Performance & Load Testing (k6)**, **Infrastructure as Code (Terraform)**, or **Chaos Engineering & Capstone Staff Interview Defense** (while the developer studies React fundamentals offline).

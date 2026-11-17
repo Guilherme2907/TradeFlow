@@ -1,0 +1,48 @@
+/* ==========================================================================
+   TradeFlow Design System Tokens — Shared Source of Truth
+   Identical to docker/keycloak/themes/tradeflow/login/resources/css/tokens.css
+   ========================================================================== */
+
+:root {
+  /* Core Surfaces */
+  --tf-bg-canvas: #060913;
+  --tf-bg-surface: #0d1322;
+  --tf-bg-surface-elevated: #131c31;
+  --tf-bg-input: #090e1a;
+
+  /* Borders & Hairlines */
+  --tf-border-subtle: rgba(148, 163, 184, 0.14);
+  --tf-border-strong: rgba(148, 163, 184, 0.28);
+  --tf-border-focus: #10b981;
+
+  /* Typography */
+  --tf-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --tf-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --tf-text-primary: #f8fafc;
+  --tf-text-secondary: #94a3b8;
+  --tf-text-muted: #64748b;
+
+  /* Institutional Accent Palette */
+  --tf-accent-primary: #10b981;
+  --tf-accent-primary-hover: #059669;
+  --tf-accent-primary-glow: rgba(16, 185, 129, 0.18);
+  --tf-accent-cyan: #38bdf8;
+  --tf-accent-cyan-glow: rgba(56, 189, 248, 0.14);
+
+  /* Semantic Status */
+  --tf-danger: #ef4444;
+  --tf-danger-bg: rgba(239, 68, 68, 0.1);
+  --tf-danger-border: rgba(239, 68, 68, 0.3);
+  --tf-warning: #f59e0b;
+  --tf-warning-bg: rgba(245, 158, 11, 0.1);
+  --tf-warning-border: rgba(245, 158, 11, 0.3);
+  --tf-success: #10b981;
+  --tf-success-bg: rgba(16, 185, 129, 0.1);
+  --tf-success-border: rgba(16, 185, 129, 0.3);
+
+  /* Geometry */
+  --tf-radius-sm: 8px;
+  --tf-radius-md: 12px;
+  --tf-radius-lg: 16px;
+  --tf-shadow-card: 0 24px 64px -12px rgba(2, 6, 23, 0.75), 0 0 0 1px rgba(148, 163, 184, 0.1);
+}

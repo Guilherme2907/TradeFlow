@@ -38,6 +38,7 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
     {
         builder.UseSetting("ConnectionStrings:RabbitMq", string.Empty);
         builder.UseSetting("ConnectionStrings:Kafka", string.Empty);
+        builder.UseSetting("ConnectionStrings:Redis", string.Empty);
         builder.UseSetting("Outbox:BackgroundWorkerEnabled", "false");
         builder.UseSetting("Authentication:Authority", TestJwtTokenGenerator.Issuer);
         builder.UseSetting("Authentication:Audience", TestJwtTokenGenerator.Audience);

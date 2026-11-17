@@ -9,6 +9,7 @@ using TradeFlow.Application.Orders.Commands.CancelOrder;
 using TradeFlow.Application.Orders.Commands.CreateOrder;
 using TradeFlow.Application.Orders.Commands.SubmitOrder;
 using TradeFlow.Application.Orders.Queries.GetOrderById;
+using TradeFlow.Application.Orders.Queries.GetOrders;
 using TradeFlow.Application.Common.Security;
 
 namespace TradeFlow.Api.Endpoints;
@@ -59,6 +60,14 @@ public static class OrderEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/", GetOrdersAsync)
+            .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
+            .WithName("GetOrders")
+            .WithSummary("Lists orders scoped to the authenticated trader's tenant (or across tenants for privileged roles).")
+            .Produces<IReadOnlyList<OrderResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/{id:guid}", GetOrderByIdAsync)
             .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
@@ -122,6 +131,17 @@ public static class OrderEndpoints
     {
         var command = new CancelOrderCommand(id, request.Reason);
         var result = await sender.Send(command, cancellationToken);
+
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetOrdersAsync(
+        Guid? customerId,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetOrdersQuery(customerId);
+        var result = await sender.Send(query, cancellationToken);
 
         return result.ToHttpResult();
     }

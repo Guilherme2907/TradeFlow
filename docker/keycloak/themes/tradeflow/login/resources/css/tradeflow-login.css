@@ -1,0 +1,310 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--tf-bg-canvas);
+  color: var(--tf-text-primary);
+  font-family: var(--tf-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tf-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  background-image:
+    radial-gradient(circle at 18% 20%, var(--tf-accent-primary-glow), transparent 40%),
+    radial-gradient(circle at 82% 80%, var(--tf-accent-cyan-glow), transparent 40%);
+}
+
+/* Subtle institutional grid background */
+.tf-auth-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 90%);
+  pointer-events: none;
+}
+
+.tf-auth-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(180deg, rgba(19, 28, 49, 0.88) 0%, rgba(13, 19, 34, 0.96) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--tf-border-subtle);
+  border-radius: var(--tf-radius-lg);
+  box-shadow: var(--tf-shadow-card);
+  padding: 36px 32px 32px;
+}
+
+.tf-brand-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.tf-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tf-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--tf-accent-primary) 0%, #0ea5e9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.4);
+}
+
+.tf-brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--tf-text-primary);
+}
+
+.tf-brand-subtitle {
+  font-size: 13px;
+  color: var(--tf-text-secondary);
+  margin: 0;
+}
+
+.tf-security-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  font-family: var(--tf-font-mono);
+  font-size: 11px;
+  color: var(--tf-accent-primary);
+}
+
+.tf-security-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--tf-accent-primary);
+  box-shadow: 0 0 8px var(--tf-accent-primary);
+}
+
+.tf-alert {
+  padding: 12px 14px;
+  border-radius: var(--tf-radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 20px;
+  border: 1px solid transparent;
+}
+
+.tf-alert-error {
+  background-color: var(--tf-danger-bg);
+  border-color: var(--tf-danger-border);
+  color: #fca5a5;
+}
+
+.tf-alert-warning {
+  background-color: var(--tf-warning-bg);
+  border-color: var(--tf-warning-border);
+  color: #fcd34d;
+}
+
+.tf-alert-info,
+.tf-alert-success {
+  background-color: var(--tf-success-bg);
+  border-color: var(--tf-success-border);
+  color: #6ee7b7;
+}
+
+.tf-field {
+  margin-bottom: 18px;
+}
+
+.tf-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tf-text-secondary);
+  margin-bottom: 7px;
+}
+
+.tf-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  background-color: var(--tf-bg-input);
+  border: 1px solid var(--tf-border-subtle);
+  border-radius: var(--tf-radius-sm);
+  color: var(--tf-text-primary);
+  font-family: var(--tf-font-sans);
+  font-size: 14px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.tf-input::placeholder {
+  color: var(--tf-text-muted);
+}
+
+.tf-input:focus {
+  outline: none;
+  border-color: var(--tf-border-focus);
+  box-shadow: 0 0 0 3px var(--tf-accent-primary-glow);
+}
+
+.tf-input[aria-invalid='true'] {
+  border-color: var(--tf-danger);
+}
+
+.tf-field-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #fca5a5;
+}
+
+.tf-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  font-size: 13px;
+}
+
+.tf-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tf-text-secondary);
+  cursor: pointer;
+}
+
+.tf-checkbox-label input {
+  accent-color: var(--tf-accent-primary);
+  width: 15px;
+  height: 15px;
+}
+
+.tf-link {
+  color: var(--tf-accent-cyan);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.tf-link:hover {
+  text-decoration: underline;
+}
+
+.tf-btn-primary {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: var(--tf-radius-sm);
+  background: linear-gradient(135deg, var(--tf-accent-primary) 0%, #059669 100%);
+  color: #022c22;
+  font-family: var(--tf-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  box-shadow: 0 8px 24px -6px rgba(16, 185, 129, 0.45);
+}
+
+.tf-btn-primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.tf-btn-primary:active {
+  transform: translateY(0);
+}
+
+.tf-sandbox-box {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--tf-border-subtle);
+}
+
+.tf-sandbox-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tf-text-muted);
+  margin: 0 0 10px 0;
+  font-weight: 600;
+}
+
+.tf-sandbox-accounts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tf-sandbox-btn {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--tf-radius-sm);
+  background: rgba(148, 163, 184, 0.05);
+  border: 1px solid var(--tf-border-subtle);
+  color: var(--tf-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tf-sandbox-btn:hover {
+  border-color: var(--tf-accent-primary);
+  background: rgba(16, 185, 129, 0.07);
+  color: var(--tf-text-primary);
+}
+
+.tf-sandbox-user {
+  display: block;
+  font-family: var(--tf-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tf-text-primary);
+}
+
+.tf-sandbox-role {
+  display: block;
+  font-size: 10px;
+  color: var(--tf-text-muted);
+  margin-top: 2px;
+}
+
+.tf-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--tf-text-muted);
+  text-align: center;
+}

@@ -1,0 +1,462 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--tf-bg-canvas);
+  color: var(--tf-text-primary);
+  font-family: var(--tf-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==========================================================================
+   Shared White-Label Auth Gate Shell (Identical to Keycloak Theme!)
+   ========================================================================== */
+
+.tf-auth-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  background-image:
+    radial-gradient(circle at 18% 20%, var(--tf-accent-primary-glow), transparent 40%),
+    radial-gradient(circle at 82% 80%, var(--tf-accent-cyan-glow), transparent 40%);
+}
+
+.tf-auth-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at center, black 40%, transparent 90%);
+  pointer-events: none;
+}
+
+.tf-auth-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(180deg, rgba(19, 28, 49, 0.88) 0%, rgba(13, 19, 34, 0.96) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--tf-border-subtle);
+  border-radius: var(--tf-radius-lg);
+  box-shadow: var(--tf-shadow-card);
+  padding: 36px 32px 32px;
+  text-align: center;
+}
+
+.tf-brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tf-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--tf-accent-primary) 0%, #0ea5e9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.4);
+}
+
+.tf-brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--tf-text-primary);
+}
+
+.tf-brand-subtitle {
+  font-size: 13px;
+  color: var(--tf-text-secondary);
+  margin: 0 0 14px;
+}
+
+.tf-security-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  font-family: var(--tf-font-mono);
+  font-size: 11px;
+  color: var(--tf-accent-primary);
+}
+
+.tf-security-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--tf-accent-primary);
+  box-shadow: 0 0 8px var(--tf-accent-primary);
+}
+
+/* ==========================================================================
+   Buttons & Form Controls
+   ========================================================================== */
+
+.tf-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--tf-radius-sm);
+  background: linear-gradient(135deg, var(--tf-accent-primary) 0%, #059669 100%);
+  color: #022c22;
+  font-family: var(--tf-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.18s ease, opacity 0.15s ease;
+  box-shadow: 0 8px 24px -6px rgba(16, 185, 129, 0.45);
+}
+
+.tf-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.tf-btn-primary:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.tf-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--tf-radius-sm);
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--tf-border-subtle);
+  color: var(--tf-text-primary);
+  font-family: var(--tf-font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tf-btn-secondary:hover:not(:disabled) {
+  border-color: var(--tf-border-strong);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.tf-btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tf-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--tf-radius-sm);
+  background: var(--tf-danger-bg);
+  border: 1px solid var(--tf-danger-border);
+  color: #fca5a5;
+  font-family: var(--tf-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tf-btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.tf-input,
+.tf-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  background-color: var(--tf-bg-input);
+  border: 1px solid var(--tf-border-subtle);
+  border-radius: var(--tf-radius-sm);
+  color: var(--tf-text-primary);
+  font-family: var(--tf-font-sans);
+  font-size: 14px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.tf-input:focus,
+.tf-select:focus {
+  outline: none;
+  border-color: var(--tf-border-focus);
+  box-shadow: 0 0 0 3px var(--tf-accent-primary-glow);
+}
+
+.tf-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tf-text-secondary);
+  margin-bottom: 6px;
+}
+
+/* ==========================================================================
+   Trading Terminal Application Layout
+   ========================================================================== */
+
+.tf-app-shell {
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(16, 185, 129, 0.08), transparent 36%),
+    radial-gradient(circle at 92% 10%, rgba(56, 189, 248, 0.08), transparent 34%);
+}
+
+.tf-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(14px);
+  background: rgba(6, 9, 19, 0.85);
+  border-bottom: 1px solid var(--tf-border-subtle);
+}
+
+.tf-topbar-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tf-topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tf-user-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.tf-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tf-text-primary);
+}
+
+.tf-user-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--tf-font-mono);
+  font-size: 11px;
+  color: var(--tf-text-secondary);
+}
+
+.tf-role-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: var(--tf-accent-cyan);
+  font-weight: 600;
+}
+
+.tf-main-container {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+
+.tf-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tf-card {
+  background: linear-gradient(180deg, rgba(19, 28, 49, 0.72) 0%, rgba(13, 19, 34, 0.92) 100%);
+  border: 1px solid var(--tf-border-subtle);
+  border-radius: var(--tf-radius-md);
+  padding: 20px;
+}
+
+.tf-kpi-label {
+  font-size: 12px;
+  color: var(--tf-text-secondary);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.tf-kpi-value {
+  font-family: var(--tf-font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--tf-text-primary);
+}
+
+.tf-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .tf-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tf-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tf-section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tf-text-primary);
+}
+
+.tf-table-wrapper {
+  overflow-x: auto;
+}
+
+.tf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tf-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tf-text-muted);
+  border-bottom: 1px solid var(--tf-border-subtle);
+}
+
+.tf-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  color: var(--tf-text-primary);
+  vertical-align: middle;
+}
+
+.tf-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.tf-table tbody tr:hover {
+  background-color: rgba(148, 163, 184, 0.05);
+}
+
+.tf-table tbody tr.tf-row-selected {
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.tf-mono {
+  font-family: var(--tf-font-mono);
+}
+
+.tf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--tf-font-mono);
+}
+
+.tf-badge-draft {
+  background: var(--tf-warning-bg);
+  border: 1px solid var(--tf-warning-border);
+  color: #fcd34d;
+}
+
+.tf-badge-submitted {
+  background: var(--tf-success-bg);
+  border: 1px solid var(--tf-success-border);
+  color: #6ee7b7;
+}
+
+.tf-badge-cancelled {
+  background: var(--tf-danger-bg);
+  border: 1px solid var(--tf-danger-border);
+  color: #fca5a5;
+}
+
+.tf-alert {
+  padding: 12px 14px;
+  border-radius: var(--tf-radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.tf-alert-error {
+  background-color: var(--tf-danger-bg);
+  border-color: var(--tf-danger-border);
+  color: #fca5a5;
+}
+
+.tf-alert-info {
+  background-color: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #7dd3fc;
+}
+
+.tf-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(148, 163, 184, 0.2);
+  border-top-color: var(--tf-accent-primary);
+  border-radius: 50%;
+  animation: tf-spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes tf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -19,6 +19,25 @@ public class OrderRepository : IOrderRepository
             .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Order>> ListAsync(
+        CustomerId? customerId = null,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<Order> query = _context.Orders
+            .AsNoTracking()
+            .Include(o => o.Lines);
+
+        if (customerId is not null)
+        {
+            query = query.Where(o => o.CustomerId == customerId);
+        }
+
+        return await query
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(Order order, CancellationToken cancellationToken = default)
     {
         await _context.Orders.AddAsync(order, cancellationToken);

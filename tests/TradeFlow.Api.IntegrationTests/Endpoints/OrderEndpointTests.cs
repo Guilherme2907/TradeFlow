@@ -281,4 +281,69 @@ public class OrderEndpointTests : IClassFixture<TradeFlowWebApplicationFactory>
         problemDetails.GetProperty("status").GetInt32().Should().Be(403);
         problemDetails.GetProperty("code").GetString().Should().Be("ORDER_TENANT_FORBIDDEN");
     }
+
+    [Fact]
+    public async Task GetOrders_WhenTraderRequestsList_ShouldReturnOnlyOwnTenantOrders()
+    {
+        // Arrange
+        var tenantAlpha = Guid.NewGuid();
+        var tenantBeta = Guid.NewGuid();
+
+        using var traderAlphaClient = CreateAuthenticatedClient(tenantAlpha, TradeFlowRoles.Trader);
+        using var traderBetaClient = CreateAuthenticatedClient(tenantBeta, TradeFlowRoles.Trader);
+        using var riskManagerClient = CreateAuthenticatedClient(null, TradeFlowRoles.RiskManager);
+
+        var alphaCreate = await traderAlphaClient.PostAsJsonAsync("/api/orders", new CreateOrderRequest(Currency: "USD"));
+        alphaCreate.StatusCode.Should().Be(HttpStatusCode.Created);
+        var alphaOrderId = await alphaCreate.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        var betaCreate = await traderBetaClient.PostAsJsonAsync("/api/orders", new CreateOrderRequest(Currency: "EUR"));
+        betaCreate.StatusCode.Should().Be(HttpStatusCode.Created);
+        var betaOrderId = await betaCreate.Content.ReadFromJsonAsync<Guid>(_jsonOptions);
+
+        // Act 1: Trader Alpha requests /api/orders
+        var alphaListResponse = await traderAlphaClient.GetAsync("/api/orders");
+        alphaListResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var alphaOrders = await alphaListResponse.Content.ReadFromJsonAsync<List<JsonElement>>(_jsonOptions);
+
+        // Assert 1: Contains Alpha's order and zero Beta orders
+        alphaOrders.Should().Contain(o => o.GetProperty("orderId").GetGuid() == alphaOrderId);
+        alphaOrders.Should().NotContain(o => o.GetProperty("orderId").GetGuid() == betaOrderId);
+
+        // Act 2: RiskManager requests /api/orders (cross-tenant visibility)
+        var riskListResponse = await riskManagerClient.GetAsync("/api/orders");
+        riskListResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var riskOrders = await riskListResponse.Content.ReadFromJsonAsync<List<JsonElement>>(_jsonOptions);
+
+        riskOrders.Should().Contain(o => o.GetProperty("orderId").GetGuid() == alphaOrderId);
+        riskOrders.Should().Contain(o => o.GetProperty("orderId").GetGuid() == betaOrderId);
+    }
+
+    [Fact]
+    public async Task GetInventoryItems_WhenAuthenticated_ShouldReturnAvailableInventory()
+    {
+        // Arrange
+        var productId = Guid.NewGuid();
+        var sku = $"SKU-CAT-{productId.ToString("N")[..6].ToUpperInvariant()}";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+            db.InventoryItems.Add(InventoryItem.Create(new ProductId(productId), sku, initialQuantity: 80));
+            await db.SaveChangesAsync();
+        }
+
+        using var traderClient = CreateAuthenticatedClient(Guid.NewGuid(), TradeFlowRoles.Trader);
+
+        // Act
+        var response = await traderClient.GetAsync("/api/inventory");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var items = await response.Content.ReadFromJsonAsync<List<JsonElement>>(_jsonOptions);
+        items.Should().Contain(i =>
+            i.GetProperty("productId").GetGuid() == productId &&
+            i.GetProperty("sku").GetString() == sku &&
+            i.GetProperty("availableQuantity").GetInt32() == 80);
+    }
 }

@@ -51,6 +51,14 @@ public class InventoryRepository : IInventoryRepository
             .FirstOrDefaultAsync(x => x.Sku == normalizedSku, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<InventoryItem>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.InventoryItems
+            .AsNoTracking()
+            .OrderBy(x => x.Sku)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(InventoryItem item, CancellationToken cancellationToken = default)
     {
         await _context.InventoryItems.AddAsync(item, cancellationToken);

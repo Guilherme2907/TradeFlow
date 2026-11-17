@@ -10,9 +10,23 @@ using TradeFlow.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Cross-cutting frameworks & Security (OAuth2 / OIDC JWT Bearer + RBAC Policies)
+// Cross-cutting frameworks & Security (OAuth2 / OIDC JWT Bearer + RBAC Policies + Strict CORS Allowlist)
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpClient();
+
+var allowedCorsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5173"];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("TradeFlowCorsPolicy", policy =>
+    {
+        policy.WithOrigins(allowedCorsOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .WithExposedHeaders("Retry-After", "Location", "X-Correlation-ID");
+    });
+});
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, _, _) =>
@@ -65,6 +79,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("TradeFlowCorsPolicy");
+
 app.UseAuthentication();
 app.UseTradeFlowResilience();
 app.UseAuthorization();
@@ -73,6 +89,7 @@ app.UseAuthorization();
 app.MapTradeFlowHealthChecks();
 app.MapAuthEndpoints();
 app.MapOrderEndpoints();
+app.MapInventoryEndpoints();
 
 app.Run();
 
