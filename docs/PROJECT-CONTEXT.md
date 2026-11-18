@@ -8,16 +8,16 @@ This document captures the real-time architectural baseline, active modules, tec
 
 | Attribute | Current Value |
 | :--- | :--- |
-| **Current Stage** | `PHASE 8: Advanced Resilience, Fault Tolerance & Edge Protection (Polly v8 & Redis Lua) [ACTIVE]` |
-| **Application Status** | Phase 1 to 8 Complete; Edge Load Shedding, Multi-Tenant Distributed Rate Limiting & Polly v8 Outbound Pipelines |
-| **Active Architecture**| Modular Monolith (Clean Architecture + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak OIDC + Redis Caching & Rate Limiting + OpenTelemetry + Polly v8 Resilience) |
-| **Primary Codebase** | .NET 10, C# |
-| **Active Testing Baseline** | Pure Domain Unit (41), Application Unit (27), Architecture (19), Infrastructure Integration Testcontainers (33), API Integration & Resilience (17) — 137 total automated tests |
+| **Current Stage** | `PHASE 11: Infrastructure as Code (Terraform Azure Provisioning & CI Linting Gates) [COMPLETE]` |
+| **Application Status** | Phase 1 to 11 Complete; Modular Monolith + Cloud-Native K8s + React 19 SPA + Azure Terraform IaC |
+| **Active Architecture**| Modular Monolith (.NET 10 + PostgreSQL Schemas + Outbox + RabbitMQ + Kafka KRaft + Keycloak White-Label SSO + Redis + OpenTelemetry + Polly v8) + React 19 SPA + Azure Terraform IaC |
+| **Primary Codebase** | .NET 10 (C#), React 19 (TypeScript), Terraform HCL (AzureRM v4) |
+| **Active Testing Baseline** | 151 Backend Tests (109 non-Docker + 42 Docker Testcontainers) + 5 Frontend Vitest Tests + Playwright E2E Spec + Terraform Static Gates (`fmt`, `validate`, `tflint`, `trivy`) |
 | **Repository Root** | `g:\Estudo\FullStack-Engineer-Plan\TradeFlow` |
-| **Last Updated** | 2026-11-13 |
+| **Last Updated** | 2026-11-17 |
 
 > [!NOTE]
-> Phase 8 (Advanced Resilience, Fault Tolerance & Edge Protection) is complete. Inbound traffic is protected by `TradeFlowResilienceMiddleware` enforcing global Load Shedding (`SemaphoreSlim.Wait(0)`) and context-aware Distributed Rate Limiting (`tenant:{customer_id}` for B2B order routes vs `auth-ip:{ip}` for brute-force protection) backed by atomic Redis Lua scripts (`INCR` + `PEXPIRE` + `PTTL`) with automatic Fail-Open fallback to `InMemoryDistributedRateLimiter`. Outbound HTTP dependencies (`KeycloakIdentityProviderService`) are isolated via Typed `HttpClient` profiles (`AddTradeFlowResiliencePipeline`) with a 5-stage Polly v8 pipeline (`TotalTimeout` -> `Bulkhead` -> `Retry` -> `CircuitBreaker` -> `AttemptTimeout`) and centralized `ResilienceHttpExecutor` mapping transient faults to `ErrorType.Unavailable` (`503 Service Unavailable`). All 137 automated tests passing with 0 warnings.
+> Phase 11 (Infrastructure as Code with Terraform on Microsoft Azure) is complete (`ADR-0019`). Cloud infrastructure is declaratively modeled under `infra/terraform/` across five single-responsibility modules (`networking`, `keyvault`, `postgresql`, `redis`, `aks`) with isolated `dev` and `prod` environments, Azure Blob Storage remote state locking (`use_azuread_auth = true`), zero public DB/Redis exposure (VNet Delegation & Private Endpoints), Workload Identity secretless pod authentication, and zero-cost GitHub Actions static/security validation (`terraform fmt`, `validate`, `tflint`, `trivy`).
 
 ---
 
@@ -64,12 +64,16 @@ This document captures the real-time architectural baseline, active modules, tec
 - Local multi-container development environment via `docker-compose.yml` (PostgreSQL 16, RabbitMQ 4 with Management UI, pgAdmin 4, Apache Kafka 3.8 KRaft, Kafka UI, Redis 7 Alpine, Jaeger all-in-one).
 - Cloud-Native Containerization & Kubernetes (ADR-0017):
   - Multi-stage, non-root (`USER $APP_UID`) production Alpine [`Dockerfile`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/Dockerfile) with layer-cached NuGet dependencies.
-  - Production Kubernetes manifests ([`deploy/k8s/tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml)) and local dev manifests ([`deploy/k8s/tradeflow-local.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-local.yaml)) specifying Liveness (`/health/live`) and Readiness (`/health/ready`) probes, zero-downtime RollingUpdate (`maxUnavailable: 0`, `maxSurge: 1`), PodDisruptionBudgets, and HorizontalPodAutoscalers.
+  - Production Kubernetes manifests ([`deploy/k8s/tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml)), full-stack pod manifests ([`deploy/k8s/rabbitmq.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/rabbitmq.yaml), [`deploy/k8s/kafka.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/kafka.yaml), [`deploy/k8s/keycloak.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/keycloak.yaml), [`deploy/k8s/tradeflow-web.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-web.yaml)), custom Keycloak/Web Dockerfiles, and local dev manifests ([`deploy/k8s/tradeflow-local.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-local.yaml)) specifying Liveness (`/health/live`) and Readiness (`/health/ready`) probes, zero-downtime RollingUpdate (`maxUnavailable: 0`, `maxSurge: 1`), and HorizontalPodAutoscalers.
   - Multi-schema EF Core migrations with dedicated history tables (`orders."__EFMigrationsHistory"` and `inventory."__EFMigrationsHistory"`) applied at container startup via [`DatabaseBootstrap.cs`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/src/TradeFlow.Api/Common/DatabaseBootstrap.cs).
   - 3-stage GitHub Actions CI/CD Pipeline ([`.github/workflows/ci-cd.yml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/.github/workflows/ci-cd.yml)) enforcing `-warnaserror`, fast Unit/Arch tests, real Testcontainers suite, and Docker image build.
 - Frontend SPA & White-Label SSO (`src/TradeFlow.Web`, ADR-0018):
   - Vite + React 19 + TypeScript SPA featuring OAuth2 PKCE (`S256`) in-memory token storage (`InMemoryWebStorage` via `oidc-client-ts`), TanStack Query server-state caching, RFC 7807 `ProblemDetails` error parsing, and strict API CORS allowlist (`TradeFlowCorsPolicy`).
   - Custom Keycloak FreeMarker login/error theme (`docker/keycloak/themes/tradeflow`) sharing identical CSS Design Tokens (`tokens.css`) and brand mark for visually seamless SSO redirection via public client `tradeflow-web`.
+- Infrastructure as Code (`infra/terraform/`, ADR-0019):
+  - Modular AzureRM v4 Terraform codebase (`modules/networking`, `modules/keyvault`, `modules/postgresql`, `modules/redis`, `modules/aks`) with isolated `environments/dev` and `environments/prod` roots.
+  - Azure Blob Storage remote state backend (`use_azuread_auth = true`) with native Blob Lease locking, Private Endpoints / VNet Delegation for PostgreSQL 16 and Redis, `random_password` -> Key Vault secret persistence, and AKS OIDC Workload Identity federation.
+  - Zero-cost CI/CD IaC validation gate (`Stage 1B: terraform-validation` in `.github/workflows/ci-cd.yml`) running `terraform fmt -check`, `terraform validate`, `tflint`, and `trivy config`.
 
 ### 2.7 Active Testing Infrastructure
 - Active (151 backend tests + 5 frontend Vitest tests + 1 Playwright E2E spec):
@@ -104,6 +108,7 @@ This document captures the real-time architectural baseline, active modules, tec
 | [ADR-0016](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0016-resilience-rate-limiting-circuit-breaker-bulkhead.md) | Edge Rate Limiting, Load Shedding, and Outbound Resilience Pipelines with Polly v8 & Redis | Accepted | 2026-11-12 |
 | [ADR-0017](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0017-cloud-native-readiness-health-probes-graceful-shutdown-migrations-cicd.md) | Cloud-Native Readiness: Liveness/Readiness Probes, Graceful Shutdown, Multi-Schema EF Core Migrations, Multi-Stage Containerization & CI/CD | Accepted | 2026-11-16 |
 | [ADR-0018](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0018-frontend-architecture-spa-pkce-white-label-keycloak-testing.md) | Frontend SPA Architecture, OAuth2 PKCE In-Memory Auth, White-Label Keycloak Theme & Testing Pyramid | Accepted | 2026-11-16 |
+| [ADR-0019](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/docs/adr/0019-infrastructure-as-code-terraform-azure-remote-state-and-linting-gates.md) | Infrastructure as Code with Terraform, Azure Remote State Locking, Modular Topology & CI Linting Gates | Accepted | 2026-11-17 |
 
 ---
 
@@ -120,5 +125,5 @@ This document captures the real-time architectural baseline, active modules, tec
 
 ## 5. Current Focus & Next Milestones
 
-- **Immediate Completed Task**: Phase 10 Frontend Architecture Baseline, Transparent Keycloak White-Label SSO (`tradeflow-web` PKCE + `loginTheme: tradeflow` + shared `tokens.css`), Backend Read APIs (`GET /api/orders`, `GET /api/inventory`) + Strict CORS Allowlist (`ADR-0018`). Verified end-to-end manually in browser (Keycloak SSO redirect -> Dashboard -> Order lifecycle).
-- **Next Planned Learning Step**: Phase 11 — Choose between **Performance & Load Testing (k6)**, **Infrastructure as Code (Terraform)**, or **Chaos Engineering & Capstone Staff Interview Defense** (while the developer studies React fundamentals offline).
+- **Immediate Completed Task**: Phase 11 — Infrastructure as Code (IaC) with Terraform on Microsoft Azure (`infra/terraform/`, `ADR-0019`), private VNet topology, Key Vault + Workload Identity, remote Blob Lease state backend, and GitHub Actions zero-cost IaC static/security validation gates (`terraform fmt`, `validate`, `tflint`, `trivy`).
+- **Next Planned Learning Step**: Phase 12 — Choose between **Performance & Load Testing (k6)**, **Frontend React Fundamentals Deep Dive & Playwright E2E Verification**, or **Chaos Engineering & Capstone Staff Interview Defense**.

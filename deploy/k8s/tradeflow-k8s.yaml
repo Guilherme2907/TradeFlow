@@ -1,8 +1,18 @@
 # ==============================================================================
-# TradeFlow Kubernetes Production Manifests (ADR-0017)
-# Contains: ConfigMap, Deployment (Zero-Downtime RollingUpdate, Probes, SIGTERM),
-#           Service (Internal Load Balancer), and HorizontalPodAutoscaler (HPA)
+# TradeFlow Kubernetes Production Manifests (ADR-0017 / ADR-0019)
+# Contains: ServiceAccount (AKS Workload Identity), ConfigMap, Deployment
+#           (Zero-Downtime RollingUpdate, Probes, SIGTERM), ClusterIP Service,
+#           and HorizontalPodAutoscaler (HPA)
 # ==============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tradeflow-api-sa
+  namespace: default
+  annotations:
+    # Populate with Terraform output: workload_identity_client_id
+    azure.workload.identity/client-id: "<AZURE_WORKLOAD_IDENTITY_CLIENT_ID>"
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,9 +21,15 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   Host__ShutdownTimeoutSeconds: "25"
+  # Cluster-internal Kubernetes Service DNS for messaging & identity pods
+  ConnectionStrings__RabbitMq: "amqp://guest:guest@tradeflow-rabbitmq-svc.default.svc.cluster.local:5672/"
+  ConnectionStrings__Kafka: "tradeflow-kafka-svc.default.svc.cluster.local:9092"
+  Authentication__Authority: "http://tradeflow-keycloak-svc.default.svc.cluster.local:8080/realms/tradeflow"
+  Authentication__Audience: "tradeflow-api"
+  Authentication__RequireHttpsMetadata: "false"
+  Outbox__BackgroundWorkerEnabled: "true"
   # Standard OpenTelemetry environment variable read by TelemetryConfiguration.cs.
   # Example cluster-internal DNS: <service-name>.<namespace>.svc.cluster.local
-  # (For local Docker Desktop testing with docker-compose Jaeger, override to: http://host.docker.internal:4317)
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:4317"
   Resilience__LoadShedding__MaxConcurrentRequests: "200"
   Resilience__RateLimiting__TenantPermitLimit: "100"
@@ -45,7 +61,9 @@ spec:
     metadata:
       labels:
         app: tradeflow-api
+        azure.workload.identity/use: "true"
     spec:
+      serviceAccountName: tradeflow-api-sa
       # Grants the pod 30 seconds after SIGTERM before sending SIGKILL.
       # Matches our .NET HostOptions.ShutdownTimeout = 25s (plus a 5s safety buffer).
       terminationGracePeriodSeconds: 30

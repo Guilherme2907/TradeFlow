@@ -1,0 +1,107 @@
+# ==============================================================================
+# Keycloak 26 White-Label Identity Provider Deployment + Service
+# Image built from docker/keycloak/Dockerfile (includes tradeflow theme + realm)
+# ==============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tradeflow-keycloak-secret
+  namespace: default
+type: Opaque
+stringData:
+  KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+  KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tradeflow-keycloak-svc
+  namespace: default
+  labels:
+    app: tradeflow-keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app: tradeflow-keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: management
+      port: 9000
+      targetPort: management
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tradeflow-keycloak
+  namespace: default
+  labels:
+    app: tradeflow-keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tradeflow-keycloak
+  template:
+    metadata:
+      labels:
+        app: tradeflow-keycloak
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: keycloak
+          image: tradeflow-keycloak:local
+          imagePullPolicy: IfNotPresent
+          # Local/dev mode uses in-memory/file storage for fast startup.
+          # For Azure AKS Production, switch args to ["start", "--import-realm"]
+          # and supply KC_DB=postgres, KC_DB_URL, KC_DB_USERNAME, KC_DB_PASSWORD from Key Vault.
+          args: ["start-dev", "--import-realm"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: management
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+          envFrom:
+            - secretRef:
+                name: tradeflow-keycloak-secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: management
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

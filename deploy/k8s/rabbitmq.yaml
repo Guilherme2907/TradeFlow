@@ -1,0 +1,99 @@
+# ==============================================================================
+# RabbitMQ 4.0 StatefulSet + ClusterIP Service for TradeFlow Kubernetes
+# ==============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tradeflow-rabbitmq-secret
+  namespace: default
+type: Opaque
+stringData:
+  RABBITMQ_DEFAULT_USER: "guest"
+  RABBITMQ_DEFAULT_PASS: "guest"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tradeflow-rabbitmq-svc
+  namespace: default
+  labels:
+    app: tradeflow-rabbitmq
+spec:
+  type: ClusterIP
+  selector:
+    app: tradeflow-rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+      protocol: TCP
+    - name: management
+      port: 15672
+      targetPort: management
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tradeflow-rabbitmq
+  namespace: default
+  labels:
+    app: tradeflow-rabbitmq
+spec:
+  serviceName: tradeflow-rabbitmq-svc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tradeflow-rabbitmq
+  template:
+    metadata:
+      labels:
+        app: tradeflow-rabbitmq
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.0-management-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: amqp
+              containerPort: 5672
+              protocol: TCP
+            - name: management
+              containerPort: 15672
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: tradeflow-rabbitmq-secret
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

@@ -37,6 +37,53 @@ jobs:
         run: dotnet test --no-build --configuration Release --filter "Category!=RequiresDocker" --logger "trx"
 
   # ============================================================================
+  # STAGE 1B: Infrastructure as Code Gate (Terraform Format, Validate, TFLint & Trivy)
+  # ============================================================================
+  terraform-validation:
+    name: "Stage 1B: Terraform Format, Validate, TFLint & Security Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+          terraform_wrapper: false
+
+      - name: Check Terraform Formatting
+        run: terraform fmt -check -recursive infra/terraform
+
+      - name: Initialize & Validate Terraform Environments (No Backend / Zero Cloud Cost)
+        run: |
+          for env in dev prod; do
+            echo "Validating environment: $env"
+            terraform -chdir="infra/terraform/environments/$env" init -backend=false
+            terraform -chdir="infra/terraform/environments/$env" validate
+          done
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Initialize & Run TFLint
+        working-directory: infra/terraform
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - name: Run Trivy IaC Security Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'config'
+          scan-ref: 'infra/terraform'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================================
   # STAGE 2: Real Infrastructure Integration Gate (Testcontainers Docker Suite)
   # ============================================================================
   integration-tests:

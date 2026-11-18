@@ -369,3 +369,19 @@ gcp_credentials.json
 elastic/.docker/es*
 .docker/filebeat/registry/*
 .docker/filebeat/meta.json
+
+# Terraform (never commit local provider binaries, plaintext tfstate, or sensitive tfvars)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

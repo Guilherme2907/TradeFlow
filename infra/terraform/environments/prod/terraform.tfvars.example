@@ -1,0 +1,4 @@
+location               = "eastus2"
+unique_suffix          = "001"
+authorized_ip_ranges   = ["203.0.113.10/32"]
+secret_expiration_date = "2027-12-31T23:59:59Z"
