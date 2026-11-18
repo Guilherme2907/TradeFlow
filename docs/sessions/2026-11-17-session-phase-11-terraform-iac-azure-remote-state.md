@@ -49,8 +49,8 @@
   1. Formatting consistency (`terraform fmt -check -recursive`)
   2. Internal syntax & cross-module reference validation (`terraform init -backend=false` + `terraform validate`)
   3. Azure provider semantic/SKU linting (`tflint` + `tflint-ruleset-azurerm`)
-  4. SAST security posture audit (`trivy config` blocking `CRITICAL`/`HIGH` misconfigurations)
-- **Local Note**: Terraform CLI is not installed on the developer's Windows host; GitHub Actions (`ubuntu-latest`) will execute the complete static & security gate upon push.
+  4. SAST security posture audit (`aquasecurity/trivy-action@v0.36.0` checking misconfigurations with zero cloud spend)
+- **CI Execution Outcome**: All stages passed 100% in GitHub Actions (Stage 1 Unit/Arch, Stage 1B Terraform validation & Trivy SAST, Stage 2 Testcontainers integration, Stage 3 Docker image build).
 
 ---
 
