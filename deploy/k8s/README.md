@@ -8,12 +8,15 @@ This directory contains declarative Kubernetes manifests to run the complete Tra
 
 | Manifest | Purpose |
 | :--- | :--- |
+| [`secret-provider-class.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/secret-provider-class.yaml) | Azure Key Vault CSI Driver `SecretProviderClass` syncing secrets into `tradeflow-kv-secrets` via Workload Identity |
+| [`postgres.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/postgres.yaml) | PostgreSQL 16 `StatefulSet` (5Gi Azure Managed Disk PVC, `PGDATA` subdir) for dev lab |
+| [`redis.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/redis.yaml) | Redis 7 Alpine `StatefulSet` (2Gi Azure Managed Disk PVC) for dev lab |
 | [`rabbitmq.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/rabbitmq.yaml) | RabbitMQ 4.0 `StatefulSet` (2Gi PVC), Management UI + AMQP `ClusterIP` Service |
-| [`kafka.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/kafka.yaml) | Apache Kafka 3.8 KRaft `StatefulSet` (5Gi PVC), headless + `ClusterIP` Services |
+| [`kafka.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/kafka.yaml) | Apache Kafka 3.8 KRaft `StatefulSet` (5Gi PVC, `logs` subdir), headless + `ClusterIP` Services |
 | [`keycloak.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/keycloak.yaml) | Keycloak 26 `Deployment` with baked white-label theme + realm (`docker/keycloak/Dockerfile`) |
 | [`tradeflow-web.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-web.yaml) | React 19 + Nginx unprivileged SPA `Deployment` (`src/TradeFlow.Web/Dockerfile`) |
 | [`tradeflow-local.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-local.yaml) | TradeFlow .NET 10 API for Docker Desktop K8s (connects to Postgres/Redis/Jaeger on host and RabbitMQ/Kafka/Keycloak pods) |
-| [`tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml) | Production AKS manifest (`ServiceAccount` for Azure Workload Identity, HPA, zero-downtime `RollingUpdate`) |
+| [`tradeflow-k8s.yaml`](file:///g:/Estudo/FullStack-Engineer-Plan/TradeFlow/deploy/k8s/tradeflow-k8s.yaml) | Production AKS manifest (`ServiceAccount` for Azure Workload Identity, CSI AKV secret mount, HPA, zero-downtime `RollingUpdate`) |
 
 ---
 

@@ -105,3 +105,12 @@ resource "azurerm_key_vault_secret" "redis_connection_string" {
   expiration_date = var.secret_expiration_date
   depends_on      = [azurerm_role_assignment.deployer_kv_officer]
 }
+
+resource "azurerm_key_vault_secret" "app_insights_connection_string" {
+  name            = "application-insights-connection-string"
+  value           = module.aks.application_insights_connection_string
+  key_vault_id    = module.keyvault.key_vault_id
+  content_type    = "application/x-connection-string"
+  expiration_date = var.secret_expiration_date
+  depends_on      = [azurerm_role_assignment.deployer_kv_officer]
+}

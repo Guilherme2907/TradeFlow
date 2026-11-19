@@ -1,0 +1,219 @@
+name: TradeFlow CD (Terraform, ACR & AKS)
+
+# Manual workflow_dispatch trigger keeps standard CI green until GitHub OIDC
+# federated credentials (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID)
+# are configured in repository Secrets and GitHub Environments (dev / prod).
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target Azure environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - prod
+      apply_terraform:
+        description: "Run terraform apply before deploying to AKS"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write # Required for passwordless OIDC authentication with Microsoft Entra ID
+  contents: read
+
+# Never cancel a live Terraform apply or Kubernetes rollout mid-flight
+concurrency:
+  group: cd-azure-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  TF_WORKING_DIR: infra/terraform/environments/${{ inputs.environment || 'dev' }}
+
+jobs:
+  # ============================================================================
+  # STAGE 1: Infrastructure as Code (Terraform Plan / Apply via OIDC)
+  # ============================================================================
+  terraform-infra:
+    name: "CD 1: Terraform Infra (${{ inputs.environment || 'dev' }})"
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    outputs:
+      acr_login_server: ${{ steps.tf_outputs.outputs.acr_login_server }}
+      aks_cluster_name: ${{ steps.tf_outputs.outputs.aks_cluster_name }}
+      resource_group_name: ${{ steps.tf_outputs.outputs.resource_group_name }}
+      key_vault_name: ${{ steps.tf_outputs.outputs.key_vault_name }}
+      workload_identity_client_id: ${{ steps.tf_outputs.outputs.workload_identity_client_id }}
+      tenant_id: ${{ steps.tf_outputs.outputs.tenant_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC Federated Identity — Zero Client Secrets)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_VAR_authorized_ip_ranges: ${{ vars.AUTHORIZED_IP_RANGES || '["198.51.100.0/24"]' }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: inputs.apply_terraform
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Export Terraform Outputs for Downstream Jobs
+        id: tf_outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> "$GITHUB_OUTPUT"
+          echo "aks_cluster_name=$(terraform output -raw aks_cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+          echo "key_vault_name=$(terraform output -raw key_vault_name)" >> "$GITHUB_OUTPUT"
+          echo "workload_identity_client_id=$(terraform output -raw workload_identity_client_id)" >> "$GITHUB_OUTPUT"
+          echo "tenant_id=$(terraform output -raw tenant_id)" >> "$GITHUB_OUTPUT"
+
+  # ============================================================================
+  # STAGE 2: Build & Push Immutable Container Images to ACR
+  # ============================================================================
+  build-and-push-acr:
+    name: "CD 2: Build & Push Images to ACR"
+    runs-on: ubuntu-latest
+    needs: terraform-infra
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Authenticate Docker to Azure Container Registry
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.terraform-infra.outputs.acr_login_server }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az acr login --name "$ACR_NAME"
+
+      - name: Build & Push TradeFlow API, Keycloak & Web (Immutable SHA Tags)
+        env:
+          ACR: ${{ needs.terraform-infra.outputs.acr_login_server }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ACR/tradeflow-api:$TAG" -t "$ACR/tradeflow-api:latest" -f Dockerfile .
+          docker build -t "$ACR/tradeflow-keycloak:$TAG" -t "$ACR/tradeflow-keycloak:latest" -f docker/keycloak/Dockerfile .
+          docker build -t "$ACR/tradeflow-web:$TAG" -t "$ACR/tradeflow-web:latest" -f src/TradeFlow.Web/Dockerfile .
+
+          docker push "$ACR/tradeflow-api:$TAG"
+          docker push "$ACR/tradeflow-api:latest"
+          docker push "$ACR/tradeflow-keycloak:$TAG"
+          docker push "$ACR/tradeflow-keycloak:latest"
+          docker push "$ACR/tradeflow-web:$TAG"
+          docker push "$ACR/tradeflow-web:latest"
+
+  # ============================================================================
+  # STAGE 3: Apply AKV SecretProviderClass, Migrations & Rollout to AKS
+  # ============================================================================
+  deploy-aks:
+    name: "CD 3: Deploy Manifests & Verify Rollout (${{ inputs.environment || 'dev' }})"
+    runs-on: ubuntu-latest
+    needs: [terraform-infra, build-and-push-acr]
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubelogin for Azure RBAC Authentication
+        uses: azure/use-kubelogin@v1
+
+      - name: Set AKS Context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ needs.terraform-infra.outputs.resource_group_name }}
+          cluster-name: ${{ needs.terraform-infra.outputs.aks_cluster_name }}
+          use-kubelogin: 'true'
+
+      - name: Render Environment Bindings & Immutable Image Tags
+        env:
+          ACR: ${{ needs.terraform-infra.outputs.acr_login_server }}
+          TAG: ${{ github.sha }}
+          KV_NAME: ${{ needs.terraform-infra.outputs.key_vault_name }}
+          WI_CLIENT_ID: ${{ needs.terraform-infra.outputs.workload_identity_client_id }}
+          TENANT_ID: ${{ needs.terraform-infra.outputs.tenant_id }}
+        run: |
+          # Bind Key Vault & Workload Identity outputs into SecretProviderClass + ServiceAccount
+          sed -i "s|keyvaultName: \".*\"|keyvaultName: \"$KV_NAME\"|g" deploy/k8s/secret-provider-class.yaml
+          sed -i "s|clientID: \".*\"|clientID: \"$WI_CLIENT_ID\"|g" deploy/k8s/secret-provider-class.yaml
+          sed -i "s|tenantId: \".*\"|tenantId: \"$TENANT_ID\"|g" deploy/k8s/secret-provider-class.yaml
+          sed -i "s|azure.workload.identity/client-id: \".*\"|azure.workload.identity/client-id: \"$WI_CLIENT_ID\"|g" deploy/k8s/tradeflow-k8s.yaml
+
+          # Pin immutable commit SHA tags instead of mutable :latest
+          sed -i "s|image: .*/tradeflow-api:.*|image: $ACR/tradeflow-api:$TAG|g" deploy/k8s/tradeflow-k8s.yaml
+          sed -i "s|image: .*/tradeflow-keycloak:.*|image: $ACR/tradeflow-keycloak:$TAG|g" deploy/k8s/keycloak.yaml
+          sed -i "s|image: .*/tradeflow-web:.*|image: $ACR/tradeflow-web:$TAG|g" deploy/k8s/tradeflow-web.yaml
+
+      - name: Apply Azure Key Vault SecretProviderClass & Backing Infrastructure
+        run: |
+          kubectl apply -f deploy/k8s/secret-provider-class.yaml
+          if [ "${{ inputs.environment || 'dev' }}" = "dev" ]; then
+            kubectl apply -f deploy/k8s/postgres.yaml
+            kubectl apply -f deploy/k8s/redis.yaml
+          fi
+          kubectl apply -f deploy/k8s/rabbitmq.yaml
+          kubectl apply -f deploy/k8s/kafka.yaml
+          kubectl apply -f deploy/k8s/keycloak.yaml
+
+      - name: Setup .NET 10 SDK & Apply EF Core Migrations (Dev Lab Tunnel)
+        if: inputs.environment == 'dev'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Run EF Core Migrations Against Cluster PostgreSQL
+        if: inputs.environment == 'dev'
+        run: |
+          kubectl rollout status statefulset/tradeflow-postgres --timeout=180s
+          dotnet tool install --global dotnet-ef
+          kubectl port-forward svc/tradeflow-postgres-svc 15432:5432 &
+          PF_PID=$!
+          trap "kill $PF_PID || true" EXIT
+          sleep 3
+          dotnet ef database update --project src/TradeFlow.Infrastructure --context OrdersDbContext \
+            --connection "Host=localhost;Port=15432;Database=tradeflow;Username=postgres;Password=postgres"
+          dotnet ef database update --project src/TradeFlow.Infrastructure --context InventoryDbContext \
+            --connection "Host=localhost;Port=15432;Database=tradeflow;Username=postgres;Password=postgres"
+
+      - name: Deploy TradeFlow API & Web and Wait for Zero-Downtime Rollout
+        run: |
+          kubectl apply -f deploy/k8s/tradeflow-k8s.yaml
+          kubectl apply -f deploy/k8s/tradeflow-web.yaml
+          kubectl rollout status deployment/tradeflow-api --timeout=300s
+          kubectl rollout status deployment/tradeflow-web --timeout=300s

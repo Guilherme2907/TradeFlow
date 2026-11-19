@@ -21,18 +21,15 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   Host__ShutdownTimeoutSeconds: "25"
-  # Cluster-internal Kubernetes Service DNS for database, cache, messaging & identity
-  ConnectionStrings__Database: "Host=tradeflow-postgres-svc.default.svc.cluster.local;Port=5432;Database=tradeflow;Username=postgres;Password=postgres"
-  ConnectionStrings__Redis: "tradeflow-redis-svc.default.svc.cluster.local:6379"
+  # Cluster-internal non-sensitive service endpoints (DB, Redis & App Insights come from AKV via SecretProviderClass)
   ConnectionStrings__RabbitMq: "amqp://guest:guest@tradeflow-rabbitmq-svc.default.svc.cluster.local:5672/"
   ConnectionStrings__Kafka: "tradeflow-kafka-svc.default.svc.cluster.local:9092"
   Authentication__Authority: "http://tradeflow-keycloak-svc.default.svc.cluster.local:8080/realms/tradeflow"
   Authentication__Audience: "tradeflow-api"
   Authentication__RequireHttpsMetadata: "false"
   Outbox__BackgroundWorkerEnabled: "true"
-  # Standard OpenTelemetry environment variable read by TelemetryConfiguration.cs.
-  # Example cluster-internal DNS: <service-name>.<namespace>.svc.cluster.local
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:4317"
+  # Disable unused OTLP exporter in AKS when exporting telemetry to Azure Application Insights
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
   Resilience__LoadShedding__MaxConcurrentRequests: "200"
   Resilience__RateLimiting__TenantPermitLimit: "100"
   Resilience__RateLimiting__AuthPermitLimit: "15"
@@ -74,7 +71,7 @@ spec:
       containers:
         - name: tradeflow-api
           image: acrtradeflowdev001.azurecr.io/tradeflow-api:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
@@ -82,10 +79,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: tradeflow-config
+            - secretRef:
+                name: tradeflow-kv-secrets
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
           # Resource Requests (for scheduler placement) & Limits (to prevent noisy pod OOM)
           resources:
             requests:
-              cpu: "250m"
+              cpu: "100m"
               memory: "256Mi"
             limits:
               cpu: "1000m"
@@ -117,6 +120,13 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 2
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "azure-kv-tradeflow"
 ---
 apiVersion: v1
 kind: Service

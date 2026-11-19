@@ -1,5 +1,8 @@
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.Diagnostics;
 using Npgsql;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using TradeFlow.Infrastructure.Diagnostics;
@@ -7,7 +10,8 @@ using TradeFlow.Infrastructure.Diagnostics;
 namespace TradeFlow.Api.Common;
 
 /// <summary>
-/// Configures OpenTelemetry distributed tracing and metrics with W3C TraceContext propagation (ADR-0015).
+/// Configures OpenTelemetry distributed tracing, metrics, and logs with W3C TraceContext propagation (ADR-0015).
+/// Exports to OTLP (Jaeger/local) and/or Azure Application Insights depending on environment configuration.
 /// </summary>
 public static class TelemetryConfiguration
 {
@@ -16,12 +20,20 @@ public static class TelemetryConfiguration
         IConfiguration configuration)
     {
         var otlpEndpoint = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]
-            ?? configuration.GetConnectionString("Otlp")
-            ?? "http://localhost:4317";
+            ?? configuration.GetConnectionString("Otlp");
+
+        var appInsightsConnectionString = configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+            ?? configuration["ApplicationInsights:ConnectionString"];
+
+        var hasAppInsights = !string.IsNullOrWhiteSpace(appInsightsConnectionString);
+        if (string.IsNullOrWhiteSpace(otlpEndpoint) && !hasAppInsights)
+        {
+            otlpEndpoint = "http://localhost:4317";
+        }
 
         var enableConsole = configuration.GetValue<bool>("OpenTelemetry:EnableConsoleExporter");
 
-        services.AddOpenTelemetry()
+        var otelBuilder = services.AddOpenTelemetry()
             .ConfigureResource(resource => resource
                 .AddService(serviceName: "TradeFlow.Api", serviceVersion: "1.0.0"))
             .WithTracing(tracing =>
@@ -66,7 +78,32 @@ public static class TelemetryConfiguration
                         options.Endpoint = new Uri(otlpEndpoint);
                     });
                 }
+
+                if (hasAppInsights)
+                {
+                    tracing.AddAzureMonitorTraceExporter(options =>
+                    {
+                        options.ConnectionString = appInsightsConnectionString;
+                    });
+                }
             });
+
+        if (hasAppInsights)
+        {
+            otelBuilder
+                .WithMetrics(metrics => metrics
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddAzureMonitorMetricExporter(options =>
+                    {
+                        options.ConnectionString = appInsightsConnectionString;
+                    }))
+                .WithLogging(logging => logging
+                    .AddAzureMonitorLogExporter(options =>
+                    {
+                        options.ConnectionString = appInsightsConnectionString;
+                    }));
+        }
 
         return services;
     }

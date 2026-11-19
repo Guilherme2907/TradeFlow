@@ -22,3 +22,14 @@ output "workload_identity_client_id" {
   value       = azurerm_user_assigned_identity.tradeflow_api.client_id
   description = "Client ID of the TradeFlow API Workload Identity for Kubernetes ServiceAccount annotation."
 }
+
+output "application_insights_name" {
+  value       = azurerm_application_insights.this.name
+  description = "Name of the Azure Application Insights resource."
+}
+
+output "application_insights_connection_string" {
+  value       = azurerm_application_insights.this.connection_string
+  sensitive   = true
+  description = "Connection string for Azure Application Insights OpenTelemetry exporter."
+}
