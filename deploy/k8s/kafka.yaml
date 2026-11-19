@@ -100,7 +100,7 @@ spec:
             - name: KAFKA_NUM_PARTITIONS
               value: "3"
             - name: KAFKA_LOG_DIRS
-              value: "/var/lib/kafka/data"
+              value: "/var/lib/kafka/data/logs"
           resources:
             requests:
               cpu: "250m"

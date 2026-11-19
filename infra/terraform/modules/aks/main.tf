@@ -39,7 +39,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     max_count                    = var.system_node_max_count
     node_count                   = var.system_node_min_count
     vnet_subnet_id               = var.aks_subnet_id
-    only_critical_addons_enabled = true
+    only_critical_addons_enabled = var.only_critical_addons_enabled
     temporary_name_for_rotation  = "sysrot"
     os_disk_type                 = "Managed"
   }
@@ -80,6 +80,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "workload" {
+  count                 = var.enable_workload_node_pool ? 1 : 0
   name                  = "workload"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
   vm_size               = var.workload_node_vm_size
@@ -114,12 +115,11 @@ resource "azurerm_user_assigned_identity" "tradeflow_api" {
 }
 
 resource "azurerm_federated_identity_credential" "tradeflow_api" {
-  name                = "fic-tradeflow-api-${var.name_prefix}"
-  resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.tradeflow_api.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = azurerm_kubernetes_cluster.this.oidc_issuer_url
-  subject             = "system:serviceaccount:default:tradeflow-api-sa"
+  name                      = "fic-tradeflow-api-${var.name_prefix}"
+  user_assigned_identity_id = azurerm_user_assigned_identity.tradeflow_api.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.this.oidc_issuer_url
+  subject                   = "system:serviceaccount:default:tradeflow-api-sa"
 }
 
 resource "azurerm_role_assignment" "tradeflow_api_kv_secrets_user" {

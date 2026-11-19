@@ -372,8 +372,11 @@ elastic/.docker/es*
 
 # Terraform (never commit local provider binaries, plaintext tfstate, or sensitive tfvars)
 **/.terraform/*
+.terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+*tfplan*
 crash.log
 crash.*.log
 *.tfvars

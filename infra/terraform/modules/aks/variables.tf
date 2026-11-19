@@ -43,7 +43,19 @@ variable "key_vault_id" {
 variable "kubernetes_version" {
   type        = string
   description = "Kubernetes control plane and node version."
-  default     = "1.30"
+  default     = "1.36"
+}
+
+variable "only_critical_addons_enabled" {
+  type        = bool
+  description = "Taints the default node pool so only critical addons can run."
+  default     = false
+}
+
+variable "enable_workload_node_pool" {
+  type        = bool
+  description = "Whether to create a separate workload node pool."
+  default     = true
 }
 
 variable "system_node_vm_size" {

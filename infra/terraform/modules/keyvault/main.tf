@@ -9,13 +9,14 @@ resource "azurerm_key_vault" "this" {
   rbac_authorization_enabled    = true
   soft_delete_retention_days    = 90
   purge_protection_enabled      = var.purge_protection_enabled
-  public_network_access_enabled = false
+  public_network_access_enabled = var.public_network_access_enabled
   tags                          = var.tags
 
   network_acls {
     default_action             = "Deny"
     bypass                     = "AzureServices"
     virtual_network_subnet_ids = var.allowed_subnet_ids
+    ip_rules                   = var.allowed_ip_rules
   }
 }
 

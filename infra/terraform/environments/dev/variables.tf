@@ -12,7 +12,7 @@ variable "unique_suffix" {
 
 variable "authorized_ip_ranges" {
   type        = list(string)
-  description = "Explicit CIDR ranges allowed to access the AKS Kubernetes API server (replace with VPN/CI runner egress IP)."
+  description = "Explicit CIDR ranges allowed to access the AKS Kubernetes API server and Key Vault during lab testing (override in terraform.tfvars)."
   default     = ["198.51.100.0/24"]
 }
 

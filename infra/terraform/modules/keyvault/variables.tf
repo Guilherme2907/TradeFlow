@@ -34,6 +34,18 @@ variable "allowed_subnet_ids" {
   default     = []
 }
 
+variable "allowed_ip_rules" {
+  type        = list(string)
+  description = "Public IP CIDR blocks permitted to access the Key Vault."
+  default     = []
+}
+
+variable "public_network_access_enabled" {
+  type        = bool
+  description = "Controls public internet access to the Key Vault."
+  default     = false
+}
+
 variable "purge_protection_enabled" {
   type        = bool
   description = "Protects secrets against permanent deletion during soft-delete retention."

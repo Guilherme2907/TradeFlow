@@ -53,7 +53,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: keycloak
-          image: tradeflow-keycloak:local
+          image: acrtradeflowdev001.azurecr.io/tradeflow-keycloak:latest
           imagePullPolicy: IfNotPresent
           # Local/dev mode uses in-memory/file storage for fast startup.
           # For Azure AKS Production, switch args to ["start", "--import-realm"]

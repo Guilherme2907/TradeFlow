@@ -1,0 +1,97 @@
+# ==============================================================================
+# PostgreSQL 16 StatefulSet + Service for TradeFlow Kubernetes
+# Uses Azure Managed Disk (PVC) for persistent database storage
+# ==============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tradeflow-postgres-secret
+  namespace: default
+type: Opaque
+stringData:
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "postgres"
+  POSTGRES_DB: "tradeflow"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tradeflow-postgres-svc
+  namespace: default
+  labels:
+    app: tradeflow-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: tradeflow-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tradeflow-postgres
+  namespace: default
+  labels:
+    app: tradeflow-postgres
+spec:
+  serviceName: tradeflow-postgres-svc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tradeflow-postgres
+  template:
+    metadata:
+      labels:
+        app: tradeflow-postgres
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          envFrom:
+            - secretRef:
+                name: tradeflow-postgres-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "tradeflow"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres", "-d", "tradeflow"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

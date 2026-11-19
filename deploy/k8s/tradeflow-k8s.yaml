@@ -11,7 +11,7 @@ metadata:
   namespace: default
   annotations:
     # Populate with Terraform output: workload_identity_client_id
-    azure.workload.identity/client-id: "<AZURE_WORKLOAD_IDENTITY_CLIENT_ID>"
+    azure.workload.identity/client-id: "ccb22a52-362e-4716-95e5-2e2ea23b2d7a"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -21,7 +21,9 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   Host__ShutdownTimeoutSeconds: "25"
-  # Cluster-internal Kubernetes Service DNS for messaging & identity pods
+  # Cluster-internal Kubernetes Service DNS for database, cache, messaging & identity
+  ConnectionStrings__Database: "Host=tradeflow-postgres-svc.default.svc.cluster.local;Port=5432;Database=tradeflow;Username=postgres;Password=postgres"
+  ConnectionStrings__Redis: "tradeflow-redis-svc.default.svc.cluster.local:6379"
   ConnectionStrings__RabbitMq: "amqp://guest:guest@tradeflow-rabbitmq-svc.default.svc.cluster.local:5672/"
   ConnectionStrings__Kafka: "tradeflow-kafka-svc.default.svc.cluster.local:9092"
   Authentication__Authority: "http://tradeflow-keycloak-svc.default.svc.cluster.local:8080/realms/tradeflow"
@@ -71,7 +73,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: tradeflow-api
-          image: ghcr.io/tradeflow/tradeflow-api:latest
+          image: acrtradeflowdev001.azurecr.io/tradeflow-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

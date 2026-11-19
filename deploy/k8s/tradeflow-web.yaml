@@ -40,7 +40,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: tradeflow-web
-          image: tradeflow-web:local
+          image: acrtradeflowdev001.azurecr.io/tradeflow-web:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

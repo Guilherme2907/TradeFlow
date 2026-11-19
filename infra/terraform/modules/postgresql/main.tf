@@ -61,6 +61,13 @@ resource "azurerm_postgresql_flexible_server_database" "tradeflow" {
   charset   = "UTF8"
 }
 
+resource "azurerm_postgresql_flexible_server_database" "keycloak" {
+  name      = "keycloak"
+  server_id = azurerm_postgresql_flexible_server.this.id
+  collation = "en_US.utf8"
+  charset   = "UTF8"
+}
+
 resource "azurerm_postgresql_flexible_server_configuration" "require_secure_transport" {
   name      = "require_secure_transport"
   server_id = azurerm_postgresql_flexible_server.this.id
