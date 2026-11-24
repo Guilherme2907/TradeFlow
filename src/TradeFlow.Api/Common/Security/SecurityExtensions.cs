@@ -12,6 +12,7 @@ public static class TradeFlowPolicies
     public const string OrderWritePolicy = "OrderWritePolicy";
     public const string OrderCancelPolicy = "OrderCancelPolicy";
     public const string OrderReadPolicy = "OrderReadPolicy";
+    public const string AdminPolicy = "AdminPolicy";
 }
 
 public static class SecurityExtensions
@@ -77,7 +78,10 @@ public static class SecurityExtensions
                           TradeFlowRoles.Trader,
                           TradeFlowRoles.RiskManager,
                           TradeFlowRoles.ComplianceAuditor,
-                          TradeFlowRoles.Admin));
+                          TradeFlowRoles.Admin))
+            .AddPolicy(TradeFlowPolicies.AdminPolicy, policy =>
+                policy.RequireAuthenticatedUser()
+                      .RequireRole(TradeFlowRoles.Admin));
 
         return services;
     }

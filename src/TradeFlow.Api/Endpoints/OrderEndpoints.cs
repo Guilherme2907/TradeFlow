@@ -10,6 +10,7 @@ using TradeFlow.Application.Orders.Commands.CreateOrder;
 using TradeFlow.Application.Orders.Commands.SubmitOrder;
 using TradeFlow.Application.Orders.Queries.GetOrderById;
 using TradeFlow.Application.Orders.Queries.GetOrders;
+using TradeFlow.Application.Orders.Queries.GetOrdersSummary;
 using TradeFlow.Application.Common.Security;
 
 namespace TradeFlow.Api.Endpoints;
@@ -64,8 +65,16 @@ public static class OrderEndpoints
         group.MapGet("/", GetOrdersAsync)
             .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
             .WithName("GetOrders")
-            .WithSummary("Lists orders scoped to the authenticated trader's tenant (or across tenants for privileged roles).")
+            .WithSummary("Lists orders scoped to the authenticated trader's tenant with optional status and currency filters.")
             .Produces<IReadOnlyList<OrderResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/summary", GetOrdersSummaryAsync)
+            .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
+            .WithName("GetOrdersSummary")
+            .WithSummary("Returns aggregated order counts and submitted trading volume by currency for the current tenant (or global for privileged roles).")
+            .Produces<OrdersSummaryResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
@@ -137,12 +146,23 @@ public static class OrderEndpoints
 
     private static async Task<IResult> GetOrdersAsync(
         Guid? customerId,
+        string? status,
+        string? currency,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var query = new GetOrdersQuery(customerId);
+        var query = new GetOrdersQuery(customerId, status, currency);
         var result = await sender.Send(query, cancellationToken);
 
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> GetOrdersSummaryAsync(
+        Guid? customerId,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetOrdersSummaryQuery(customerId), cancellationToken);
         return result.ToHttpResult();
     }
 

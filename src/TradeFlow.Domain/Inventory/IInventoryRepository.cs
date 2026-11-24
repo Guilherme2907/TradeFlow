@@ -11,4 +11,5 @@ public interface IInventoryRepository
     Task<IReadOnlyList<InventoryItem>> GetAllAsync(CancellationToken cancellationToken = default);
     Task AddAsync(InventoryItem item, CancellationToken cancellationToken = default);
     void Update(InventoryItem item);
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

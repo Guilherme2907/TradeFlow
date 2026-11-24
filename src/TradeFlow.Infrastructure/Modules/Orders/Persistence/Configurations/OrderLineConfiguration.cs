@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TradeFlow.Domain.Common;
@@ -7,6 +8,13 @@ namespace TradeFlow.Infrastructure.Modules.Orders.Persistence.Configurations;
 
 public class OrderLineConfiguration : IEntityTypeConfiguration<OrderLine>
 {
+    private readonly bool _isInMemory;
+
+    public OrderLineConfiguration(bool isInMemory = false)
+    {
+        _isInMemory = isInMemory;
+    }
+
     public void Configure(EntityTypeBuilder<OrderLine> builder)
     {
         builder.ToTable("order_lines", "orders");
@@ -37,21 +45,39 @@ public class OrderLineConfiguration : IEntityTypeConfiguration<OrderLine>
             .HasColumnName("quantity")
             .IsRequired();
 
-        // Map Money Value Object using EF Core ComplexProperty (ADR-0004)
-        builder.ComplexProperty(x => x.UnitPrice, moneyBuilder =>
+        // Map Money Value Object using EF Core ComplexProperty on relational databases (ADR-0004).
+        // EF Core 10's InMemory provider does not support ComplexProperty in Include() shapers.
+        if (_isInMemory)
         {
-            moneyBuilder.Property(m => m.Amount)
-                .HasColumnName("unit_price_amount")
-                .HasPrecision(18, 2)
+            builder.Property(x => x.UnitPrice)
+                .HasConversion(
+                    m => $"{m.Amount.ToString(CultureInfo.InvariantCulture)}|{m.Currency}",
+                    raw => ParseMoney(raw))
                 .IsRequired();
+        }
+        else
+        {
+            builder.ComplexProperty(x => x.UnitPrice, moneyBuilder =>
+            {
+                moneyBuilder.Property(m => m.Amount)
+                    .HasColumnName("unit_price_amount")
+                    .HasPrecision(18, 2)
+                    .IsRequired();
 
-            moneyBuilder.Property(m => m.Currency)
-                .HasColumnName("unit_price_currency")
-                .HasMaxLength(3)
-                .IsRequired();
-        });
+                moneyBuilder.Property(m => m.Currency)
+                    .HasColumnName("unit_price_currency")
+                    .HasMaxLength(3)
+                    .IsRequired();
+            });
+        }
 
         // LineTotal is a computed domain property (UnitPrice * Quantity), not persisted
         builder.Ignore(x => x.LineTotal);
+    }
+
+    private static Money ParseMoney(string raw)
+    {
+        var parts = raw.Split('|');
+        return new Money(decimal.Parse(parts[0], CultureInfo.InvariantCulture), parts[1]);
     }
 }

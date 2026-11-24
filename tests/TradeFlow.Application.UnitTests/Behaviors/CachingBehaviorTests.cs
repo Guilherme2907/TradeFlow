@@ -19,6 +19,11 @@ public class CachingBehaviorTests
         public TimeSpan? Expiration => TimeSpan.FromMinutes(2);
     }
 
+    public sealed record InvalidatingCommand(string Id) : IRequest<Result<string>>, ICacheInvalidatingCommand
+    {
+        public IReadOnlyCollection<string> CachePrefixesToInvalidate => [$"items:{Id}:"];
+    }
+
     private readonly ICacheService _cacheService = Substitute.For<ICacheService>();
 
     [Fact]
@@ -110,5 +115,37 @@ public class CachingBehaviorTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be("FreshFromDb");
         await next.Received(1).Invoke();
+    }
+
+    [Fact]
+    public async Task Handle_WhenInvalidatingCommandSucceeds_ShouldEvictCachePrefixes()
+    {
+        var behavior = new CachingBehavior<InvalidatingCommand, Result<string>>(
+            _cacheService,
+            NullLogger<CachingBehavior<InvalidatingCommand, Result<string>>>.Instance);
+
+        var next = Substitute.For<RequestHandlerDelegate<Result<string>>>();
+        next.Invoke().Returns(Result.Success("Updated"));
+
+        var result = await behavior.Handle(new InvalidatingCommand("42"), next, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cacheService.Received(1).RemoveByPrefixAsync("items:42:", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenInvalidatingCommandFails_ShouldNotEvictCachePrefixes()
+    {
+        var behavior = new CachingBehavior<InvalidatingCommand, Result<string>>(
+            _cacheService,
+            NullLogger<CachingBehavior<InvalidatingCommand, Result<string>>>.Instance);
+
+        var next = Substitute.For<RequestHandlerDelegate<Result<string>>>();
+        next.Invoke().Returns(Result.Failure<string>(Error.Validation("ERR", "Bad input")));
+
+        var result = await behavior.Handle(new InvalidatingCommand("42"), next, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _cacheService.DidNotReceiveWithAnyArgs().RemoveByPrefixAsync(default!, default);
     }
 }

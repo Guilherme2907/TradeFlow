@@ -4,10 +4,14 @@ using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TradeFlow.Application.Catalog.Contracts;
+using TradeFlow.Application.Catalog.Services;
 using TradeFlow.Application.Common.Caching;
 using TradeFlow.Application.Inventory.Contracts;
 using TradeFlow.Application.Inventory.Services;
 using TradeFlow.Application.Orders.Gateways;
+using TradeFlow.Domain.Catalog;
+using TradeFlow.Domain.Customers;
 using TradeFlow.Domain.Inventory;
 using TradeFlow.Domain.Orders;
 using Microsoft.Extensions.Logging;
@@ -16,6 +20,8 @@ using TradeFlow.Infrastructure.Caching;
 using TradeFlow.Infrastructure.Messaging;
 using TradeFlow.Infrastructure.Messaging.Kafka;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
+using TradeFlow.Infrastructure.Modules.Catalog.Persistence;
+using TradeFlow.Infrastructure.Modules.Customers.Persistence;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Consumers;
 using TradeFlow.Infrastructure.Modules.Orders.Gateways;
@@ -46,6 +52,10 @@ public static class DependencyInjection
                        .AddInterceptors(sp.GetRequiredService<DomainEventsToOutboxMessagesInterceptor>()));
             services.AddModuleDbContext<InventoryDbContext>(options =>
                 options.UseInMemoryDatabase(dbName ?? "TradeFlow_Inventory_TestDb"));
+            services.AddModuleDbContext<CatalogDbContext>(options =>
+                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Catalog_TestDb"));
+            services.AddModuleDbContext<CustomersDbContext>(options =>
+                options.UseInMemoryDatabase(dbName ?? "TradeFlow_Customers_TestDb"));
         }
         else
         {
@@ -54,8 +64,12 @@ public static class DependencyInjection
 
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IInventoryRepository, InventoryRepository>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<ICustomerAccountRepository, CustomerAccountRepository>();
         services.AddScoped<IInventoryModule, InventoryModule>();
+        services.AddScoped<ICatalogModule, CatalogModule>();
         services.AddScoped<IInventoryReservationService, InventoryReservationServiceAdapter>();
+        services.AddScoped<ICatalogGateway, CatalogGatewayAdapter>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         var rabbitMqConnectionString = configuration.GetConnectionString("RabbitMq");
@@ -206,6 +220,12 @@ public static class DependencyInjection
 
         services.AddModuleDbContext<InventoryDbContext>((sp, options) =>
             options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(InventoryDbContext), "inventory", configureNpgsql)));
+
+        services.AddModuleDbContext<CatalogDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(CatalogDbContext), "catalog", configureNpgsql)));
+
+        services.AddModuleDbContext<CustomersDbContext>((sp, options) =>
+            options.UseNpgsql(sp.GetRequiredService<DbConnection>(), npgsql => ConfigureNpgsql(npgsql, typeof(CustomersDbContext), "customers", configureNpgsql)));
 
         return services;
     }

@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using TradeFlow.Infrastructure;
+using TradeFlow.Infrastructure.Modules.Catalog.Persistence;
+using TradeFlow.Infrastructure.Modules.Customers.Persistence;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 using TradeFlow.Infrastructure.Persistence;
@@ -60,8 +62,12 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
             var descriptors = services.Where(d =>
                 d.ServiceType == typeof(DbContextOptions<OrdersDbContext>) ||
                 d.ServiceType == typeof(DbContextOptions<InventoryDbContext>) ||
+                d.ServiceType == typeof(DbContextOptions<CatalogDbContext>) ||
+                d.ServiceType == typeof(DbContextOptions<CustomersDbContext>) ||
                 d.ServiceType == typeof(OrdersDbContext) ||
                 d.ServiceType == typeof(InventoryDbContext) ||
+                d.ServiceType == typeof(CatalogDbContext) ||
+                d.ServiceType == typeof(CustomersDbContext) ||
                 d.ServiceType == typeof(IModuleDbContext) ||
                 d.ServiceType == typeof(DbConnection)).ToList();
 
@@ -73,7 +79,7 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
             // Same registration path as production: module contexts sharing one scoped connection (ADR-0010)
             services.AddNpgsqlModuleDbContexts(_dbContainer.GetConnectionString());
 
-            // Initialize PostgreSQL schemas and tables for both bounded contexts
+            // Initialize PostgreSQL schemas and tables for all bounded contexts
             var sp = services.BuildServiceProvider();
             using var scope = sp.CreateScope();
 
@@ -84,6 +90,16 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
             inventoryDb.Database.ExecuteSqlRaw("CREATE SCHEMA IF NOT EXISTS inventory;");
             var inventoryCreator = (RelationalDatabaseCreator)inventoryDb.Database.GetService<IDatabaseCreator>();
             inventoryCreator.CreateTables();
+
+            var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+            catalogDb.Database.ExecuteSqlRaw("CREATE SCHEMA IF NOT EXISTS catalog;");
+            var catalogCreator = (RelationalDatabaseCreator)catalogDb.Database.GetService<IDatabaseCreator>();
+            catalogCreator.CreateTables();
+
+            var customersDb = scope.ServiceProvider.GetRequiredService<CustomersDbContext>();
+            customersDb.Database.ExecuteSqlRaw("CREATE SCHEMA IF NOT EXISTS customers;");
+            var customersCreator = (RelationalDatabaseCreator)customersDb.Database.GetService<IDatabaseCreator>();
+            customersCreator.CreateTables();
         });
     }
 }

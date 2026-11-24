@@ -460,3 +460,45 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* ==========================================================================
+   Module Navigation Tabs
+   ========================================================================== */
+
+.tf-nav-tabs {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 24px 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.tf-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--tf-radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--tf-text-secondary);
+  font-family: var(--tf-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.tf-nav-tab:hover {
+  color: var(--tf-text-primary);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.tf-nav-tab-active {
+  color: var(--tf-accent-primary);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+}

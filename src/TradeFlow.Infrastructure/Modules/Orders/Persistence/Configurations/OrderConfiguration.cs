@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TradeFlow.Domain.Orders;
@@ -6,6 +7,13 @@ namespace TradeFlow.Infrastructure.Modules.Orders.Persistence.Configurations;
 
 public class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
+    private readonly bool _isInMemory;
+
+    public OrderConfiguration(bool isInMemory = false)
+    {
+        _isInMemory = isInMemory;
+    }
+
     public void Configure(EntityTypeBuilder<Order> builder)
     {
         builder.ToTable("orders", "orders");
@@ -54,17 +62,32 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(x => x.Version)
             .IsRowVersion();
 
-        // Optional MinimumOrderValue mapped as complex type
-        builder.ComplexProperty(x => x.MinimumOrderValue, moneyBuilder =>
+        // Optional MinimumOrderValue mapped as complex type on relational databases.
+        // EF Core 10's InMemory provider has a known shaper bug with nullable ComplexProperty + Include().
+        if (_isInMemory)
         {
-            moneyBuilder.Property(m => m.Amount)
-                .HasColumnName("minimum_order_value_amount")
-                .HasPrecision(18, 2);
+            builder.Property(x => x.MinimumOrderValue)
+                .HasConversion(
+                    m => m.HasValue
+                        ? $"{m.Value.Amount.ToString(CultureInfo.InvariantCulture)}|{m.Value.Currency}"
+                        : null,
+                    raw => string.IsNullOrWhiteSpace(raw)
+                        ? (Money?)null
+                        : ParseMoney(raw));
+        }
+        else
+        {
+            builder.ComplexProperty(x => x.MinimumOrderValue, moneyBuilder =>
+            {
+                moneyBuilder.Property(m => m.Amount)
+                    .HasColumnName("minimum_order_value_amount")
+                    .HasPrecision(18, 2);
 
-            moneyBuilder.Property(m => m.Currency)
-                .HasColumnName("minimum_order_value_currency")
-                .HasMaxLength(3);
-        });
+                moneyBuilder.Property(m => m.Currency)
+                    .HasColumnName("minimum_order_value_currency")
+                    .HasMaxLength(3);
+            });
+        }
 
         // Computed domain properties ignored by EF Core
         builder.Ignore(x => x.TotalAmount);
@@ -79,5 +102,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.Navigation(x => x.Lines)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+
+    private static Money ParseMoney(string raw)
+    {
+        var parts = raw.Split('|');
+        return new Money(decimal.Parse(parts[0], CultureInfo.InvariantCulture), parts[1]);
     }
 }

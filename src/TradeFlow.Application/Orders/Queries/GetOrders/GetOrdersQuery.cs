@@ -8,4 +8,7 @@ namespace TradeFlow.Application.Orders.Queries.GetOrders;
 /// Lists orders accessible to the current user context.
 /// Standard traders are restricted strictly to their own tenant; privileged roles may inspect across tenants (ADR-0013).
 /// </summary>
-public sealed record GetOrdersQuery(Guid? FilterCustomerId = null) : IRequest<Result<IReadOnlyList<OrderResponse>>>;
+public sealed record GetOrdersQuery(
+    Guid? FilterCustomerId = null,
+    string? Status = null,
+    string? Currency = null) : IRequest<Result<IReadOnlyList<OrderResponse>>>;

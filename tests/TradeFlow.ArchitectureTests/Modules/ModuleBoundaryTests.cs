@@ -12,9 +12,13 @@ public class ModuleBoundaryTests
 
     private const string OrdersDomainNamespace = "TradeFlow.Domain.Orders";
     private const string InventoryDomainNamespace = "TradeFlow.Domain.Inventory";
+    private const string CatalogDomainNamespace = "TradeFlow.Domain.Catalog";
+    private const string CustomersDomainNamespace = "TradeFlow.Domain.Customers";
     private const string OrdersApplicationNamespace = "TradeFlow.Application.Orders";
     private const string InventoryApplicationNamespace = "TradeFlow.Application.Inventory";
     private const string InventoryServicesNamespace = "TradeFlow.Application.Inventory.Services";
+    private const string CatalogApplicationNamespace = "TradeFlow.Application.Catalog";
+    private const string CatalogServicesNamespace = "TradeFlow.Application.Catalog.Services";
 
     [Fact]
     public void OrdersDomain_ShouldNotDependOn_InventoryDomain()
@@ -117,6 +121,86 @@ public class ModuleBoundaryTests
 
         result.IsSuccessful.Should().BeTrue(
             $"Inventory persistence must not reference Orders. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void CatalogDomain_ShouldNotDependOn_OrdersOrInventoryDomain()
+    {
+        var result = Types.InAssembly(DomainAssembly)
+            .That()
+            .ResideInNamespaceStartingWith(CatalogDomainNamespace)
+            .ShouldNot()
+            .HaveDependencyOnAny(OrdersDomainNamespace, InventoryDomainNamespace)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Catalog domain must remain isolated from Orders and Inventory domains. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void OrdersApplication_ShouldNotDependOn_CatalogDomain_Or_InternalCatalogServices()
+    {
+        var result = Types.InAssembly(ApplicationAssembly)
+            .That()
+            .ResideInNamespaceStartingWith(OrdersApplicationNamespace)
+            .ShouldNot()
+            .HaveDependencyOnAny(CatalogDomainNamespace, CatalogServicesNamespace)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Orders application must communicate with Catalog solely via gateways/contracts (ADR-0007). Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void CatalogInfrastructure_ShouldNotDependOn_OrdersOrInventoryPersistence()
+    {
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Infrastructure.Modules.Catalog")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                OrdersDomainNamespace,
+                InventoryDomainNamespace,
+                "TradeFlow.Infrastructure.Modules.Orders",
+                "TradeFlow.Infrastructure.Modules.Inventory")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Catalog persistence must not reference Orders or Inventory. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void CustomersDomain_ShouldNotDependOn_OtherModuleDomains()
+    {
+        var result = Types.InAssembly(DomainAssembly)
+            .That()
+            .ResideInNamespaceStartingWith(CustomersDomainNamespace)
+            .ShouldNot()
+            .HaveDependencyOnAny(OrdersDomainNamespace, InventoryDomainNamespace, CatalogDomainNamespace)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Customers domain must remain isolated from other module domains. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void CustomersInfrastructure_ShouldNotDependOn_OtherModulePersistence()
+    {
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Infrastructure.Modules.Customers")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                OrdersDomainNamespace,
+                InventoryDomainNamespace,
+                CatalogDomainNamespace,
+                "TradeFlow.Infrastructure.Modules.Orders",
+                "TradeFlow.Infrastructure.Modules.Inventory",
+                "TradeFlow.Infrastructure.Modules.Catalog")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"Customers persistence must not reference other modules. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
     }
 
     [Fact]

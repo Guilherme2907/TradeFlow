@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using TradeFlow.Application.Common.Caching;
 using TradeFlow.Application.Common.Models;
 using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
@@ -14,7 +15,10 @@ public sealed record AddOrderLineCommand(
     string Sku,
     string ProductName,
     decimal UnitPrice,
-    int Quantity) : IRequest<Result<Guid>>;
+    int Quantity) : IRequest<Result<Guid>>, ICacheInvalidatingCommand
+{
+    public IReadOnlyCollection<string> CachePrefixesToInvalidate => [$"orders:{OrderId}:"];
+}
 
 public sealed class AddOrderLineCommandValidator : AbstractValidator<AddOrderLineCommand>
 {

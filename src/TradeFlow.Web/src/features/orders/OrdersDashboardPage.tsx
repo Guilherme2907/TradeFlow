@@ -1,24 +1,39 @@
 import { useMemo, useState } from 'react';
-import { LogOut, Package, RefreshCw } from 'lucide-react';
+import { BookOpen, Building2, ClipboardList, LogOut, Package, RefreshCw } from 'lucide-react';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { ErrorBanner } from '../../shared/components/ErrorBanner';
 import { StatusBadge } from '../../shared/components/StatusBadge';
 import { formatCurrency, formatShortId, formatTimestamp } from '../../shared/utils/formatters';
 import { useAuth } from '../auth/AuthContext';
+import { CatalogPage } from '../catalog/CatalogPage';
+import { useCatalogProductsQuery } from '../catalog/useCatalogQueries';
+import { CustomersPage } from '../customers/CustomersPage';
+import { InventoryPage } from '../inventory/InventoryPage';
 import { useInventoryQuery } from '../inventory/useInventoryQuery';
 import { OrderComposerPanel } from './OrderComposerPanel';
 import { OrderDetailPanel } from './OrderDetailPanel';
-import { useOrderDetailQuery, useOrdersQuery } from './useOrdersQueries';
+import { useOrderDetailQuery, useOrdersQuery, useOrdersSummaryQuery } from './useOrdersQueries';
+
+type ActiveTab = 'orders' | 'catalog' | 'inventory' | 'customers';
 
 export function OrdersDashboardPage() {
   const { session, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<ActiveTab>('orders');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [currencyFilter, setCurrencyFilter] = useState('');
 
-  const ordersQuery = useOrdersQuery();
+  const ordersQuery = useOrdersQuery({
+    status: statusFilter || undefined,
+    currency: currencyFilter || undefined
+  });
+  const ordersSummaryQuery = useOrdersSummaryQuery();
   const inventoryQuery = useInventoryQuery();
+  const catalogQuery = useCatalogProductsQuery({ activeOnly: true, pageSize: 50 });
 
   const orders = ordersQuery.data ?? [];
   const inventoryItems = inventoryQuery.data ?? [];
+  const catalogProducts = catalogQuery.data?.items ?? [];
 
   const activeOrderSummary = useMemo(
     () => orders.find((o) => o.orderId === selectedOrderId) ?? orders[0] ?? null,
@@ -29,8 +44,9 @@ export function OrdersDashboardPage() {
   const orderDetailQuery = useOrderDetailQuery(activeOrderSummary?.orderId ?? null);
   const selectedOrder = orderDetailQuery.data ?? activeOrderSummary;
 
-  const submittedCount = orders.filter((o) => o.status === 'Submitted').length;
-  const draftCount = orders.filter((o) => o.status === 'Draft').length;
+  const submittedCount = ordersSummaryQuery.data?.submittedCount ?? orders.filter((o) => o.status === 'Submitted').length;
+  const draftCount = ordersSummaryQuery.data?.draftCount ?? orders.filter((o) => o.status === 'Draft').length;
+  const totalOrdersCount = ordersSummaryQuery.data?.totalOrders ?? orders.length;
   const totalAvailableUnits = inventoryItems.reduce((acc, item) => acc + item.availableQuantity, 0);
 
   return (
@@ -68,9 +84,55 @@ export function OrdersDashboardPage() {
             </button>
           </div>
         </div>
+        <nav className="tf-nav-tabs" aria-label="Primary Modules">
+          <button
+            type="button"
+            className={`tf-nav-tab ${activeTab === 'orders' ? 'tf-nav-tab-active' : ''}`}
+            onClick={() => setActiveTab('orders')}
+          >
+            <ClipboardList size={15} />
+            Orders Desk
+          </button>
+          <button
+            type="button"
+            className={`tf-nav-tab ${activeTab === 'catalog' ? 'tf-nav-tab-active' : ''}`}
+            onClick={() => setActiveTab('catalog')}
+          >
+            <BookOpen size={15} />
+            Catalog ({catalogProducts.length})
+          </button>
+          <button
+            type="button"
+            className={`tf-nav-tab ${activeTab === 'inventory' ? 'tf-nav-tab-active' : ''}`}
+            onClick={() => setActiveTab('inventory')}
+          >
+            <Package size={15} />
+            Inventory ({inventoryItems.length})
+          </button>
+          <button
+            type="button"
+            className={`tf-nav-tab ${activeTab === 'customers' ? 'tf-nav-tab-active' : ''}`}
+            onClick={() => setActiveTab('customers')}
+          >
+            <Building2 size={15} />
+            Accounts & Contracts
+          </button>
+        </nav>
       </header>
 
       <main className="tf-main-container">
+        {activeTab === 'catalog' ? (
+          <CatalogPage isAdmin={session.isAdmin} />
+        ) : activeTab === 'inventory' ? (
+          <InventoryPage isAdmin={session.isAdmin} catalogProducts={catalogProducts} />
+        ) : activeTab === 'customers' ? (
+          <CustomersPage
+            hasCustomerId={Boolean(session.customerId)}
+            isPrivilegedRole={session.isPrivilegedRole}
+            isAdmin={session.isAdmin}
+          />
+        ) : (
+          <>
         {ordersQuery.error ? (
           <div style={{ marginBottom: 20 }}>
             <ErrorBanner error={ordersQuery.error} />
@@ -85,8 +147,8 @@ export function OrdersDashboardPage() {
 
         <section className="tf-kpi-grid" aria-label="Trading Desk Metrics">
           <div className="tf-card">
-            <div className="tf-kpi-label">Visible Orders</div>
-            <div className="tf-kpi-value">{orders.length}</div>
+            <div className="tf-kpi-label">Total Orders</div>
+            <div className="tf-kpi-value">{totalOrdersCount}</div>
           </div>
           <div className="tf-card">
             <div className="tf-kpi-label">Submitted Orders</div>
@@ -160,11 +222,34 @@ export function OrdersDashboardPage() {
 
         <div className="tf-workspace-grid">
           <section className="tf-card" aria-label="Order Book">
-            <div className="tf-section-header">
+            <div className="tf-section-header" style={{ flexWrap: 'wrap', gap: 10 }}>
               <h2 className="tf-section-title">Purchase Order Book</h2>
-              <span className="tf-mono" style={{ fontSize: 11, color: 'var(--tf-text-muted)' }}>
-                GET /api/orders
-              </span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select
+                  aria-label="Filter by Status"
+                  className="tf-select"
+                  style={{ height: 30, fontSize: 12, width: 120 }}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All Status</option>
+                  <option value="Draft">Draft</option>
+                  <option value="Submitted">Submitted</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <select
+                  aria-label="Filter by Currency"
+                  className="tf-select"
+                  style={{ height: 30, fontSize: 12, width: 96 }}
+                  value={currencyFilter}
+                  onChange={(e) => setCurrencyFilter(e.target.value)}
+                >
+                  <option value="">All FX</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="BRL">BRL</option>
+                </select>
+              </div>
             </div>
 
             {ordersQuery.isLoading ? (
@@ -236,6 +321,7 @@ export function OrdersDashboardPage() {
 
             <OrderComposerPanel
               inventoryItems={inventoryItems}
+              catalogProducts={catalogProducts}
               selectedDraftOrderId={
                 selectedOrder && selectedOrder.status === 'Draft' ? selectedOrder.orderId : null
               }
@@ -244,6 +330,8 @@ export function OrdersDashboardPage() {
             />
           </aside>
         </div>
+          </>
+        )}
       </main>
     </div>
   );

@@ -6,8 +6,35 @@ import type {
   OrderResponse
 } from './types';
 
-export async function fetchOrders(): Promise<OrderResponse[]> {
-  return apiFetch<OrderResponse[]>('/api/orders');
+export interface OrdersFilterParams {
+  status?: string;
+  currency?: string;
+}
+
+export interface CurrencyVolumeSummary {
+  currency: string;
+  orderCount: number;
+  totalAmount: number;
+}
+
+export interface OrdersSummaryResponse {
+  totalOrders: number;
+  draftCount: number;
+  submittedCount: number;
+  cancelledCount: number;
+  submittedVolumeByCurrency: CurrencyVolumeSummary[];
+}
+
+export async function fetchOrders(filters: OrdersFilterParams = {}): Promise<OrderResponse[]> {
+  const qs = new URLSearchParams();
+  if (filters.status) qs.set('status', filters.status);
+  if (filters.currency) qs.set('currency', filters.currency);
+  const query = qs.toString();
+  return apiFetch<OrderResponse[]>(`/api/orders${query ? `?${query}` : ''}`);
+}
+
+export async function fetchOrdersSummary(): Promise<OrdersSummaryResponse> {
+  return apiFetch<OrdersSummaryResponse>('/api/orders/summary');
 }
 
 export async function fetchOrderById(orderId: string): Promise<OrderResponse> {

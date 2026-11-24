@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using TradeFlow.Application.Common.Caching;
 using TradeFlow.Application.Common.Models;
 using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
@@ -9,7 +10,10 @@ namespace TradeFlow.Application.Orders.Commands.CancelOrder;
 
 public sealed record CancelOrderCommand(
     Guid OrderId,
-    string Reason) : IRequest<Result>;
+    string Reason) : IRequest<Result>, ICacheInvalidatingCommand
+{
+    public IReadOnlyCollection<string> CachePrefixesToInvalidate => [$"orders:{OrderId}:"];
+}
 
 public sealed class CancelOrderCommandValidator : AbstractValidator<CancelOrderCommand>
 {

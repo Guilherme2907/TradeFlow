@@ -26,6 +26,7 @@ export interface TradeFlowUserSession {
   roles: string[];
   accessToken: string;
   isPrivilegedRole: boolean;
+  isAdmin: boolean;
   canWriteOrders: boolean;
   canCancelOrders: boolean;
 }
@@ -94,16 +95,17 @@ function buildUserSession(user: User): TradeFlowUserSession {
   const fullName =
     (typeof profile.name === 'string' ? profile.name : undefined) ?? username;
 
+  const isAdmin = roles.includes('Admin');
   const isPrivilegedRole =
-    roles.includes('Admin') ||
+    isAdmin ||
     roles.includes('RiskManager') ||
     roles.includes('ComplianceAuditor');
 
-  const canWriteOrders = roles.includes('Trader') || roles.includes('Admin');
+  const canWriteOrders = roles.includes('Trader') || isAdmin;
   const canCancelOrders =
     roles.includes('Trader') ||
     roles.includes('RiskManager') ||
-    roles.includes('Admin');
+    isAdmin;
 
   return {
     username,
@@ -113,6 +115,7 @@ function buildUserSession(user: User): TradeFlowUserSession {
     roles,
     accessToken: user.access_token,
     isPrivilegedRole,
+    isAdmin,
     canWriteOrders,
     canCancelOrders
   };

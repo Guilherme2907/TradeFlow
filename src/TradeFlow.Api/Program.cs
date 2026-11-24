@@ -90,6 +90,8 @@ app.MapTradeFlowHealthChecks();
 app.MapAuthEndpoints();
 app.MapOrderEndpoints();
 app.MapInventoryEndpoints();
+app.MapCatalogEndpoints();
+app.MapCustomerEndpoints();
 
 app.Run();
 

@@ -54,7 +54,21 @@ public sealed class GetOrdersQueryHandler : IRequestHandler<GetOrdersQuery, Resu
         }
 
         var orders = await _orderRepository.ListAsync(effectiveCustomerId, cancellationToken);
-        IReadOnlyList<OrderResponse> response = orders.Select(o => o.ToResponse()).ToList();
+
+        IEnumerable<Order> filtered = orders;
+        if (!string.IsNullOrWhiteSpace(request.Status) &&
+            Enum.TryParse<OrderStatus>(request.Status.Trim(), ignoreCase: true, out var statusFilter))
+        {
+            filtered = filtered.Where(o => o.Status == statusFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Currency))
+        {
+            var normalizedCurrency = request.Currency.Trim().ToUpperInvariant();
+            filtered = filtered.Where(o => o.Currency.Equals(normalizedCurrency, StringComparison.OrdinalIgnoreCase));
+        }
+
+        IReadOnlyList<OrderResponse> response = filtered.Select(o => o.ToResponse()).ToList();
 
         return Result.Success(response);
     }

@@ -28,6 +28,22 @@ public sealed class CachingBehavior<TRequest, TResponse> : IPipelineBehavior<TRe
         RequestHandlerDelegate<TResponse> next,
         CancellationToken cancellationToken)
     {
+        if (request is ICacheInvalidatingCommand invalidatingCommand)
+        {
+            var commandResponse = await next();
+
+            if (commandResponse is not Result { IsFailure: true })
+            {
+                foreach (var prefix in invalidatingCommand.CachePrefixesToInvalidate)
+                {
+                    await _cacheService.RemoveByPrefixAsync(prefix, cancellationToken);
+                    _logger.LogDebug("[Cache Evict] Invalidated prefix '{CachePrefix}*' after {CommandName}.", prefix, typeof(TRequest).Name);
+                }
+            }
+
+            return commandResponse;
+        }
+
         if (request is not ICacheableQuery cacheableQuery)
         {
             return await next();

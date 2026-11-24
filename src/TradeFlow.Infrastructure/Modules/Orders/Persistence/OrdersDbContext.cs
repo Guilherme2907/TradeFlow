@@ -24,9 +24,11 @@ public class OrdersDbContext : DbContext, IModuleDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var isInMemory = Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+
         base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfiguration(new OrderConfiguration());
-        modelBuilder.ApplyConfiguration(new OrderLineConfiguration());
+        modelBuilder.ApplyConfiguration(new OrderConfiguration(isInMemory));
+        modelBuilder.ApplyConfiguration(new OrderLineConfiguration(isInMemory));
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new InboxMessageConfiguration());
 

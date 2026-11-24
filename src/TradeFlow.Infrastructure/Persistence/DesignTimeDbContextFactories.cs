@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using TradeFlow.Infrastructure.Modules.Catalog.Persistence;
+using TradeFlow.Infrastructure.Modules.Customers.Persistence;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
 using TradeFlow.Infrastructure.Modules.Orders.Persistence;
 
@@ -40,5 +42,39 @@ public sealed class InventoryDesignTimeDbContextFactory : IDesignTimeDbContextFa
             });
 
         return new InventoryDbContext(optionsBuilder.Options);
+    }
+}
+
+public sealed class CatalogDesignTimeDbContextFactory : IDesignTimeDbContextFactory<CatalogDbContext>
+{
+    public CatalogDbContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<CatalogDbContext>();
+        optionsBuilder.UseNpgsql(
+            "Host=localhost;Port=5432;Database=tradeflow;Username=postgres;Password=postgres",
+            npgsql =>
+            {
+                npgsql.MigrationsAssembly(typeof(CatalogDbContext).Assembly.FullName);
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "catalog");
+            });
+
+        return new CatalogDbContext(optionsBuilder.Options);
+    }
+}
+
+public sealed class CustomersDesignTimeDbContextFactory : IDesignTimeDbContextFactory<CustomersDbContext>
+{
+    public CustomersDbContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<CustomersDbContext>();
+        optionsBuilder.UseNpgsql(
+            "Host=localhost;Port=5432;Database=tradeflow;Username=postgres;Password=postgres",
+            npgsql =>
+            {
+                npgsql.MigrationsAssembly(typeof(CustomersDbContext).Assembly.FullName);
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "customers");
+            });
+
+        return new CustomersDbContext(optionsBuilder.Options);
     }
 }

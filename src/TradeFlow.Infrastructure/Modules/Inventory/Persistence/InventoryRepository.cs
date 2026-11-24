@@ -68,4 +68,9 @@ public class InventoryRepository : IInventoryRepository
     {
         _context.InventoryItems.Update(item);
     }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return _context.SaveChangesAsync(cancellationToken);
+    }
 }

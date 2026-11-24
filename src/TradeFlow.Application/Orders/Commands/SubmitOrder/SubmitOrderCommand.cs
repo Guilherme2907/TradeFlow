@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using TradeFlow.Application.Common.Caching;
 using TradeFlow.Application.Common.Models;
 using TradeFlow.Application.Common.Security;
 using TradeFlow.Application.Orders.Gateways;
@@ -7,7 +8,10 @@ using TradeFlow.Domain.Orders;
 
 namespace TradeFlow.Application.Orders.Commands.SubmitOrder;
 
-public sealed record SubmitOrderCommand(Guid OrderId) : IRequest<Result>;
+public sealed record SubmitOrderCommand(Guid OrderId) : IRequest<Result>, ICacheInvalidatingCommand
+{
+    public IReadOnlyCollection<string> CachePrefixesToInvalidate => [$"orders:{OrderId}:"];
+}
 
 public sealed class SubmitOrderCommandValidator : AbstractValidator<SubmitOrderCommand>
 {

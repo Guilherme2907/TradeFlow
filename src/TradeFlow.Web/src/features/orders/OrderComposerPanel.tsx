@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { ErrorBanner } from '../../shared/components/ErrorBanner';
+import type { ProductDto } from '../catalog/catalogApi';
 import type { InventoryItemDto } from '../inventory/inventoryApi';
 import { useAddOrderLineMutation, useCreateOrderMutation } from './useOrdersQueries';
 
 interface OrderComposerPanelProps {
   inventoryItems: InventoryItemDto[];
+  catalogProducts: ProductDto[];
   selectedDraftOrderId: string | null;
   canWriteOrders: boolean;
   onOrderCreated: (orderId: string) => void;
@@ -18,6 +20,7 @@ const DEFAULT_PRICES: Record<string, { name: string; unitPrice: number }> = {
 
 export function OrderComposerPanel({
   inventoryItems,
+  catalogProducts,
   selectedDraftOrderId,
   canWriteOrders,
   onOrderCreated
@@ -52,15 +55,18 @@ export function OrderComposerPanel({
     );
   };
 
+  const catalogByProductId = new Map(catalogProducts.map((p) => [p.productId, p]));
+
   const handleAddLine = (e: FormEvent) => {
     e.preventDefault();
     if (!selectedDraftOrderId || !activeInventoryItem) {
       return;
     }
 
+    const catalogMatch = catalogByProductId.get(activeInventoryItem.productId);
     const fallbackMeta = DEFAULT_PRICES[activeInventoryItem.sku];
     const resolvedName =
-      productName.trim() || fallbackMeta?.name || `Commodity ${activeInventoryItem.sku}`;
+      productName.trim() || catalogMatch?.name || fallbackMeta?.name || `Commodity ${activeInventoryItem.sku}`;
 
     addLineMutation.mutate({
       orderId: selectedDraftOrderId,
@@ -181,6 +187,12 @@ export function OrderComposerPanel({
                   onChange={(e) => {
                     const nextId = e.target.value;
                     setSelectedProductId(nextId);
+                    const catalogMatch = catalogByProductId.get(nextId);
+                    if (catalogMatch) {
+                      setProductName(catalogMatch.name);
+                      setUnitPrice(String(catalogMatch.unitPrice));
+                      return;
+                    }
                     const found = inventoryItems.find((i) => i.productId === nextId);
                     if (found && DEFAULT_PRICES[found.sku]) {
                       setProductName(DEFAULT_PRICES[found.sku].name);

@@ -19,7 +19,9 @@ flowchart TD
     P5 --> P6["Phase 6: Frontend Architecture & Real-Time Terminal\n(Playwright Full-Stack E2E & SignalR Tests)"]
     P6 --> P7["Phase 7: Distributed Caching & Observability\n(Redis, Resilience, k6 Performance Tests)"]
     P7 --> P8["Phase 8: Cloud-Native K8s & Terraform\n(CI/CD Pipeline Gates & Deployment Smoke Tests)"]
-    P8 --> P9["Phase 9: Chaos Engineering & Failure Hardening\n(Fault Injection & Disaster Recovery Drills)"]
+    P8 --> P11B["Phase 11.5: Domain Expansion Pack\n(Catalog, Customers/Contracts, Orders & Inventory Enhancements)"]
+    P11B --> P12["Phase 12: Applied AI Engineering (TradeFlow.AI)\n(LLMs, pgvector RAG, Tool Calling, Agents/MCP, AI Evals & LLMOps)"]
+    P12 --> P9["Capstone: Chaos Engineering & Failure Hardening\n(Fault Injection & Disaster Recovery Drills)"]
 ```
 
 ---
@@ -214,3 +216,33 @@ flowchart TD
   - Automated fault injection (killing broker pods, network delay injection, database primary failover).
   - Disaster recovery drills: Measuring actual RTO/RPO during unplanned database failover.
 - **Final Milestone**: Comprehensive technical interview defense of the complete TradeFlow architecture and testing strategy.
+
+---
+
+### Phase 11.5: Domain Expansion Pack (Catalog, Customers & Operational Depth)
+- **Business Focus**: Enriching the B2B trading domain with real product specifications, customer credit accounts, confidential B2B contracts, and operational pagination/filtering/restocking endpoints so the Modular Monolith and upcoming Applied AI workflows operate over rich, realistic domain data.
+- **Architectural Topics**:
+  - Adding two isolated bounded contexts (`Catalog` in `catalog` schema; `Customers` in `customers` schema) with dedicated `DbContext`s (`CatalogDbContext`, `CustomersDbContext`), proving $O(1)$ scalability of the generic `UnitOfWork` (`IModuleDbContext`) and `NetArchTest` boundary fitness rules.
+  - Preserving `ADR-0001` (point-in-time financial snapshots on `OrderLine`) while introducing a live `Catalog` source of truth.
+  - Multi-tenant read/write policies (`Admin` vs `Trader` vs `RiskManager` / `ComplianceAuditor`), pagination/filtering (`GET /api/orders`, `GET /api/orders/summary`), and operational inventory management (`POST /api/inventory`, `POST /api/inventory/{productId}/restock`).
+- **Continuous Testing Focus**:
+  - Domain invariant tests for `Product`, `CustomerAccount`, and `CustomerContract`.
+  - Automated `NetArchTest` rules extended to enforce strict isolation across all 4 modules (`Orders`, `Inventory`, `Catalog`, `Customers`).
+  - API & Testcontainers PostgreSQL integration tests verifying multi-schema migrations, pagination/filtering, and RBAC/BOLA tenant isolation.
+
+---
+
+### Phase 12: Applied AI Engineering (`TradeFlow.AI` — LLMs, RAG, Agents, MCP & Evals)
+- **Business Focus**: Building production-grade AI capabilities inside TradeFlow using provider-agnostic .NET abstractions (`Microsoft.Extensions.AI` — starting with Google Gemini and swapping to local Ollama), real multi-tenant security, observability, and automated evaluation gates.
+- **Stage 12.1 — LLM Integration & Structured Outputs (`Microsoft.Extensions.AI`)**:
+  - Natural Language Order Intake (*Order Copilot*) using `IChatClient`, typed **Structured Outputs** (JSON Schema), SSE streaming to React 19, Polly v8 resilience (`429`/timeout/fallback), and `FakeChatClient` deterministic tests.
+- **Stage 12.2 — Production Multi-Tenant RAG with PostgreSQL `pgvector`**:
+  - Isolated `ai` schema with `pgvector`, semantic chunking + metadata ingestion over `Catalog` specs and `Customers` confidential contracts, **Hybrid Search** (Vector Cosine + Full-Text `tsvector` + Reciprocal Rank Fusion), mandatory **Multi-Tenant Pre-Filtering (`customer_id`)**, citations/grounding, and Testcontainers `pgvector` cross-tenant leak prevention tests.
+- **Stage 12.3 — Secure Tool Calling & Human-in-the-Loop (HITL)**:
+  - Exposing MediatR queries/commands as LLM tools propagating `ICurrentUserContext` (RBAC/BOLA enforced in C#, never trusted to prompts), automatic Read Tools vs. human-approved Write Tools (draft confirmation cards in React), and **Prompt Injection** failure drills.
+- **Stage 12.4 — Agent Orchestration & Model Context Protocol (MCP)**:
+  - Comparing **Deterministic Workflows** (Router + Parallel + Evaluator) vs. **Multi-Agent Orchestration** (*Trade Risk & Order Advisor* with iteration/token budgets), plus building a `.NET` **TradeFlow MCP Server** exposing tools/resources to external agents/IDEs.
+- **Stage 12.5 — AI Evals, OpenTelemetry GenAI & FinOps**:
+  - OpenTelemetry GenAI semantic conventions (`input_tokens`, `output_tokens`, model, latency) visible in **Application Insights / Jaeger**, Redis token-quota rate limiting per tenant, and automated **AI Evals** (`Golden Dataset`, Tool Call Accuracy, and *LLM-as-a-Judge* faithfulness/groundedness checks).
+- **Stage 12.6 — AI-Native Software Engineering Workflow**:
+  - Daily senior engineering practices: Context Engineering (`AGENTS.md`, ADRs, Skills, MCPs), Spec-Driven Development, critical review of AI-generated PRs, and architectural fitness guardrails.
