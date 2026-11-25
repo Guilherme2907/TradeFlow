@@ -217,4 +217,46 @@ public class ModuleBoundaryTests
         result.IsSuccessful.Should().BeTrue(
             $"Every DbContext must implement IModuleDbContext. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
     }
+
+    [Fact]
+    public void AiApplication_ShouldNotDependOn_ModuleDomains_Or_InternalModuleServices()
+    {
+        var result = Types.InAssembly(ApplicationAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Application.AI")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                OrdersDomainNamespace,
+                InventoryDomainNamespace,
+                CatalogDomainNamespace,
+                CustomersDomainNamespace,
+                InventoryServicesNamespace,
+                CatalogServicesNamespace)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"TradeFlow.Application.AI must interact with other modules solely via public contracts (ADR-0007 / ADR-0020). Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
+
+    [Fact]
+    public void AiInfrastructure_ShouldNotDependOn_OtherModulePersistenceOrDomains()
+    {
+        var result = Types.InAssembly(InfrastructureAssembly)
+            .That()
+            .ResideInNamespaceStartingWith("TradeFlow.Infrastructure.Modules.AI")
+            .ShouldNot()
+            .HaveDependencyOnAny(
+                OrdersDomainNamespace,
+                InventoryDomainNamespace,
+                CatalogDomainNamespace,
+                CustomersDomainNamespace,
+                "TradeFlow.Infrastructure.Modules.Orders",
+                "TradeFlow.Infrastructure.Modules.Inventory",
+                "TradeFlow.Infrastructure.Modules.Catalog",
+                "TradeFlow.Infrastructure.Modules.Customers")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            $"AI infrastructure adapters must remain decoupled from domain persistence. Failing types: {string.Join(", ", result.FailingTypeNames ?? [])}");
+    }
 }

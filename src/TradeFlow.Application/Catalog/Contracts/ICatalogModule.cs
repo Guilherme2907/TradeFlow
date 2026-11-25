@@ -22,4 +22,7 @@ public interface ICatalogModule
     Task<Result<CatalogProductSnapshot>> GetProductSnapshotAsync(
         Guid productId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CatalogProductSnapshot>> ListActiveProductsAsync(
+        CancellationToken cancellationToken = default);
 }

@@ -10,6 +10,7 @@ import { useCatalogProductsQuery } from '../catalog/useCatalogQueries';
 import { CustomersPage } from '../customers/CustomersPage';
 import { InventoryPage } from '../inventory/InventoryPage';
 import { useInventoryQuery } from '../inventory/useInventoryQuery';
+import { OrderCopilotPanel } from '../ai/OrderCopilotPanel';
 import { OrderComposerPanel } from './OrderComposerPanel';
 import { OrderDetailPanel } from './OrderDetailPanel';
 import { useOrderDetailQuery, useOrdersQuery, useOrdersSummaryQuery } from './useOrdersQueries';
@@ -311,6 +312,11 @@ export function OrdersDashboardPage() {
           </section>
 
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <OrderCopilotPanel
+              canWriteOrders={session.canWriteOrders}
+              onOrderCreated={(newOrderId) => setSelectedOrderId(newOrderId)}
+            />
+
             {selectedOrder ? (
               <OrderDetailPanel
                 order={selectedOrder}

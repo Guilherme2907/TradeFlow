@@ -81,15 +81,17 @@ public static class DatabaseBootstrap
         await catalogContext.Database.MigrateAsync();
         await customersContext.Database.MigrateAsync();
 
-        // 4. Seed initial catalog products (rich industrial commodities for trading & upcoming AI/RAG)
+        // 4. Seed initial catalog products incrementally by SKU so upgraded local DBs receive all 10 commodities
         var seededProducts = CreateSeedCatalogProducts();
-        var hasProducts = await catalogContext.Products.AnyAsync();
-        if (!hasProducts)
+        var existingSkus = (await catalogContext.Products.Select(p => p.Sku).ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missingProducts = seededProducts.Where(p => !existingSkus.Contains(p.Sku)).ToList();
+        if (missingProducts.Count > 0)
         {
-            logger.LogInformation("Seeding initial industrial commodities into Catalog schema...");
-            await catalogContext.Products.AddRangeAsync(seededProducts);
+            logger.LogInformation("Seeding {Count} missing industrial commodities into Catalog schema...", missingProducts.Count);
+            await catalogContext.Products.AddRangeAsync(missingProducts);
             await catalogContext.SaveChangesAsync();
-            logger.LogInformation("Seeded {Count} catalog products.", seededProducts.Count);
         }
 
         // 5. Seed initial B2B customer accounts & confidential contracts (for RBAC & multi-tenant RAG)
@@ -103,27 +105,29 @@ public static class DatabaseBootstrap
             logger.LogInformation("Seeded {Count} B2B customer accounts.", seededCustomers.Count);
         }
 
-        // 6. Seed initial inventory items for all catalog commodities if table is empty
-        var hasInventoryItems = await inventoryContext.InventoryItems.AnyAsync();
-        if (!hasInventoryItems)
+        // 6. Seed missing inventory items incrementally so every catalog commodity has reservable stock
+        var existingInventoryProductIds = (await inventoryContext.InventoryItems.Select(i => i.ProductId).ToListAsync())
+            .ToHashSet();
+
+        var missingInventoryItems = seededProducts
+            .Select((p, idx) => (Product: p, Index: idx))
+            .Where(x => !existingInventoryProductIds.Contains(x.Product.Id))
+            .Select(x => InventoryItem.Create(
+                x.Product.Id,
+                x.Product.Sku,
+                initialQuantity: x.Index switch
+                {
+                    0 => 100,
+                    1 => 50,
+                    _ => 40 + (x.Index * 10)
+                }))
+            .ToList();
+
+        if (missingInventoryItems.Count > 0)
         {
-            logger.LogInformation("Seeding initial inventory items for local testing...");
-
-            var inventoryItems = seededProducts.Select((p, idx) =>
-                InventoryItem.Create(
-                    p.Id,
-                    p.Sku,
-                    initialQuantity: idx switch
-                    {
-                        0 => 100,
-                        1 => 50,
-                        _ => 40 + (idx * 10)
-                    })).ToList();
-
-            await inventoryContext.InventoryItems.AddRangeAsync(inventoryItems);
+            logger.LogInformation("Seeding {Count} missing inventory SKUs for local testing...", missingInventoryItems.Count);
+            await inventoryContext.InventoryItems.AddRangeAsync(missingInventoryItems);
             await inventoryContext.SaveChangesAsync();
-
-            logger.LogInformation("Seeded {Count} inventory SKUs.", inventoryItems.Count);
         }
 
         logger.LogInformation("Development database migration and seed complete.");

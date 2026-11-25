@@ -20,6 +20,7 @@ using TradeFlow.Infrastructure.Caching;
 using TradeFlow.Infrastructure.Messaging;
 using TradeFlow.Infrastructure.Messaging.Kafka;
 using TradeFlow.Infrastructure.Messaging.RabbitMq;
+using TradeFlow.Infrastructure.Modules.AI;
 using TradeFlow.Infrastructure.Modules.Catalog.Persistence;
 using TradeFlow.Infrastructure.Modules.Customers.Persistence;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
@@ -123,6 +124,8 @@ public static class DependencyInjection
         {
             services.AddHostedService<OutboxPublisherBackgroundService>();
         }
+
+        services.AddAiServices(configuration);
 
         return services;
     }

@@ -92,6 +92,7 @@ app.MapOrderEndpoints();
 app.MapInventoryEndpoints();
 app.MapCatalogEndpoints();
 app.MapCustomerEndpoints();
+app.MapAiEndpoints();
 
 app.Run();
 

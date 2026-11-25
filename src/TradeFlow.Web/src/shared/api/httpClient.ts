@@ -48,3 +48,61 @@ export async function apiFetch<TResponse>(
 
   return JSON.parse(text) as TResponse;
 }
+
+export async function apiStreamPost(
+  path: string,
+  body: unknown,
+  onDataLine: (jsonPayload: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const token = await getAccessToken();
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream'
+  });
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal
+  });
+
+  if (!response.ok) {
+    throw await parseApiProblemError(response);
+  }
+
+  if (!response.body) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+
+    for (const evt of events) {
+      for (const line of evt.split('\n')) {
+        if (line.startsWith('data:')) {
+          const payload = line.slice('data:'.length).trim();
+          if (payload) {
+            onDataLine(payload);
+          }
+        }
+      }
+    }
+  }
+}

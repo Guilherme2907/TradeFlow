@@ -40,6 +40,8 @@ public static class TelemetryConfiguration
             {
                 tracing
                     .AddSource(TradeFlowDiagnostics.ActivitySourceName)
+                    .AddSource("TradeFlow.AI")
+                    .AddSource("Experimental.Microsoft.Extensions.AI")
                     .AddSource("Polly")
                     .AddAspNetCoreInstrumentation(options =>
                     {

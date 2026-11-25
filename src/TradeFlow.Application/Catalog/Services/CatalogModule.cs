@@ -36,4 +36,30 @@ public sealed class CatalogModule : ICatalogModule
             product.MinimumOrderQuantity,
             product.IsActive));
     }
+
+    public async Task<IReadOnlyList<CatalogProductSnapshot>> ListActiveProductsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var (items, _) = await _productRepository.SearchAsync(
+            search: null,
+            category: null,
+            currency: null,
+            activeOnly: true,
+            page: 1,
+            pageSize: 100,
+            cancellationToken: cancellationToken);
+
+        return items
+            .Select(product => new CatalogProductSnapshot(
+                product.Id.Value,
+                product.Sku,
+                product.Name,
+                product.Category,
+                product.UnitPrice,
+                product.Currency,
+                product.UnitOfMeasure,
+                product.MinimumOrderQuantity,
+                product.IsActive))
+            .ToList();
+    }
 }
