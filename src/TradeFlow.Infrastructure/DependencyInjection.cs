@@ -7,6 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 using TradeFlow.Application.Catalog.Contracts;
 using TradeFlow.Application.Catalog.Services;
 using TradeFlow.Application.Common.Caching;
+using TradeFlow.Application.Customers.Contracts;
+using TradeFlow.Application.Customers.Services;
 using TradeFlow.Application.Inventory.Contracts;
 using TradeFlow.Application.Inventory.Services;
 using TradeFlow.Application.Orders.Gateways;
@@ -69,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomerAccountRepository, CustomerAccountRepository>();
         services.AddScoped<IInventoryModule, InventoryModule>();
         services.AddScoped<ICatalogModule, CatalogModule>();
+        services.AddScoped<ICustomersModule, CustomersModule>();
         services.AddScoped<IInventoryReservationService, InventoryReservationServiceAdapter>();
         services.AddScoped<ICatalogGateway, CatalogGatewayAdapter>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

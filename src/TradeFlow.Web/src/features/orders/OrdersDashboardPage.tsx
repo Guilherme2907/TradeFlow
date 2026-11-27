@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, Building2, ClipboardList, LogOut, Package, RefreshCw } from 'lucide-react';
+import { BookOpen, Building2, ClipboardList, LogOut, Package, RefreshCw, Sparkles } from 'lucide-react';
 import { BrandMark } from '../../shared/components/BrandMark';
 import { ErrorBanner } from '../../shared/components/ErrorBanner';
 import { StatusBadge } from '../../shared/components/StatusBadge';
@@ -10,12 +10,13 @@ import { useCatalogProductsQuery } from '../catalog/useCatalogQueries';
 import { CustomersPage } from '../customers/CustomersPage';
 import { InventoryPage } from '../inventory/InventoryPage';
 import { useInventoryQuery } from '../inventory/useInventoryQuery';
+import { KnowledgeCopilotPage } from '../ai/KnowledgeCopilotPage';
 import { OrderCopilotPanel } from '../ai/OrderCopilotPanel';
 import { OrderComposerPanel } from './OrderComposerPanel';
 import { OrderDetailPanel } from './OrderDetailPanel';
 import { useOrderDetailQuery, useOrdersQuery, useOrdersSummaryQuery } from './useOrdersQueries';
 
-type ActiveTab = 'orders' | 'catalog' | 'inventory' | 'customers';
+type ActiveTab = 'orders' | 'catalog' | 'inventory' | 'customers' | 'knowledge';
 
 export function OrdersDashboardPage() {
   const { session, logout } = useAuth();
@@ -118,6 +119,14 @@ export function OrdersDashboardPage() {
             <Building2 size={15} />
             Accounts & Contracts
           </button>
+          <button
+            type="button"
+            className={`tf-nav-tab ${activeTab === 'knowledge' ? 'tf-nav-tab-active' : ''}`}
+            onClick={() => setActiveTab('knowledge')}
+          >
+            <Sparkles size={15} />
+            AI Knowledge (RAG)
+          </button>
         </nav>
       </header>
 
@@ -132,6 +141,8 @@ export function OrdersDashboardPage() {
             isPrivilegedRole={session.isPrivilegedRole}
             isAdmin={session.isAdmin}
           />
+        ) : activeTab === 'knowledge' ? (
+          <KnowledgeCopilotPage isAdmin={session.isAdmin} />
         ) : (
           <>
         {ordersQuery.error ? (

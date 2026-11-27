@@ -6,8 +6,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
+using TradeFlow.Application.AI.Gateways;
 using TradeFlow.Infrastructure;
+using TradeFlow.Infrastructure.Modules.AI.Persistence;
 using TradeFlow.Infrastructure.Modules.Catalog.Persistence;
 using TradeFlow.Infrastructure.Modules.Customers.Persistence;
 using TradeFlow.Infrastructure.Modules.Inventory.Persistence;
@@ -19,7 +22,7 @@ namespace TradeFlow.Api.IntegrationTests.Infrastructure;
 
 public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("postgres:16-alpine")
+    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("pgvector/pgvector:pg16")
         .WithDatabase("tradeflow_api_test")
         .WithUsername("test_user")
         .WithPassword("test_pass")
@@ -78,6 +81,8 @@ public class TradeFlowWebApplicationFactory : WebApplicationFactory<Program>, IA
 
             // Same registration path as production: module contexts sharing one scoped connection (ADR-0010)
             services.AddNpgsqlModuleDbContexts(_dbContainer.GetConnectionString());
+            services.RemoveAll<IKnowledgeStore>();
+            services.AddSingleton<IKnowledgeStore>(_ => new PostgresKnowledgeStore(_dbContainer.GetConnectionString()));
 
             // Initialize PostgreSQL schemas and tables for all bounded contexts
             var sp = services.BuildServiceProvider();

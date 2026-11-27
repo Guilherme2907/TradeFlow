@@ -34,7 +34,8 @@ public sealed class CatalogModule : ICatalogModule
             product.Currency,
             product.UnitOfMeasure,
             product.MinimumOrderQuantity,
-            product.IsActive));
+            product.IsActive,
+            product.TechnicalDescription));
     }
 
     public async Task<IReadOnlyList<CatalogProductSnapshot>> ListActiveProductsAsync(
@@ -59,7 +60,8 @@ public sealed class CatalogModule : ICatalogModule
                 product.Currency,
                 product.UnitOfMeasure,
                 product.MinimumOrderQuantity,
-                product.IsActive))
+                product.IsActive,
+                product.TechnicalDescription))
             .ToList();
     }
 }

@@ -7,7 +7,10 @@ using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Timeout;
+using TradeFlow.Application.AI.Gateways;
+using TradeFlow.Application.AI.Rag;
 using TradeFlow.Infrastructure.Modules.AI.Configuration;
+using TradeFlow.Infrastructure.Modules.AI.Persistence;
 using TradeFlow.Infrastructure.Modules.AI.Providers;
 
 namespace TradeFlow.Infrastructure.Modules.AI;
@@ -91,6 +94,31 @@ public static class AiServiceCollectionExtensions
                 .UseOpenTelemetry(loggerFactory, sourceName: AiTelemetrySourceName)
                 .Build();
         });
+
+        services.TryAddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
+        {
+            var options = sp.GetRequiredService<AiOptions>();
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(AiHttpClientName);
+
+            return string.Equals(options.Provider, "Ollama", StringComparison.OrdinalIgnoreCase)
+                ? new OllamaEmbeddingGenerator(httpClient, options.Ollama)
+                : new GeminiEmbeddingGenerator(httpClient, options.Gemini);
+        });
+
+        var useInMemory = bool.TryParse(configuration["UseInMemoryDatabase"], out var isInMemory) && isInMemory;
+        if (useInMemory)
+        {
+            services.TryAddSingleton<IKnowledgeStore, InMemoryKnowledgeStore>();
+        }
+        else
+        {
+            var connectionString = configuration.GetConnectionString("Database")
+                ?? "Host=localhost;Port=5432;Database=tradeflow;Username=postgres;Password=postgres";
+            services.TryAddSingleton<IKnowledgeStore>(_ => new PostgresKnowledgeStore(connectionString));
+        }
+
+        services.AddScoped<IKnowledgeBaseIndexer, KnowledgeBaseIndexer>();
 
         return services;
     }

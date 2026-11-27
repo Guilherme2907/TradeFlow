@@ -231,7 +231,8 @@ public class ModuleBoundaryTests
                 CatalogDomainNamespace,
                 CustomersDomainNamespace,
                 InventoryServicesNamespace,
-                CatalogServicesNamespace)
+                CatalogServicesNamespace,
+                "TradeFlow.Application.Customers.Services")
             .GetResult();
 
         result.IsSuccessful.Should().BeTrue(

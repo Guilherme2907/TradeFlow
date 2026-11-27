@@ -40,6 +40,51 @@ export interface SseTokenEvent {
   code?: string | null;
 }
 
+export interface KnowledgeCitationDto {
+  sourceType: string;
+  sourceId: string;
+  title: string;
+  snippet: string;
+  isTenantConfidential: boolean;
+  customerId?: string | null;
+  cosineSimilarity: number;
+  rrfScore: number;
+  matchedVector: boolean;
+  matchedLexical: boolean;
+  citedByModel: boolean;
+}
+
+export interface KnowledgeAnswerDto {
+  answer: string;
+  hasSufficientEvidence: boolean;
+  embeddingModel: string;
+  autoIndexedOnDemand: boolean;
+  citations: KnowledgeCitationDto[];
+  telemetry: AiTokenUsageSummaryDto;
+}
+
+export interface KnowledgeReindexDto {
+  embeddingModel: string;
+  catalogProductsIndexed: number;
+  customerContractsIndexed: number;
+  totalChunksStored: number;
+  elapsedMs: number;
+}
+
+export async function askKnowledgeQuestion(question: string, topK = 5): Promise<KnowledgeAnswerDto> {
+  return apiFetch<KnowledgeAnswerDto>('/api/ai/knowledge/ask', {
+    method: 'POST',
+    body: JSON.stringify({ question, topK })
+  });
+}
+
+export async function reindexKnowledgeBase(): Promise<KnowledgeReindexDto> {
+  return apiFetch<KnowledgeReindexDto>('/api/ai/knowledge/reindex', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+}
+
 export async function parseOrderDraftWithAi(prompt: string): Promise<OrderDraftProposalDto> {
   return apiFetch<OrderDraftProposalDto>('/api/ai/orders/parse-draft', {
     method: 'POST',

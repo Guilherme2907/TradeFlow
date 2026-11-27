@@ -6,9 +6,12 @@ using Microsoft.AspNetCore.Routing;
 using TradeFlow.Api.Common.Errors;
 using TradeFlow.Api.Common.Security;
 using TradeFlow.Application.AI.Commands.ParseOrderDraft;
+using TradeFlow.Application.AI.Commands.ReindexKnowledgeBase;
 using TradeFlow.Application.AI.Exceptions;
 using TradeFlow.Application.AI.Models;
+using TradeFlow.Application.AI.Queries.AskKnowledgeQuestion;
 using TradeFlow.Application.AI.Queries.StreamTradeBriefing;
+using TradeFlow.Application.AI.Rag;
 
 namespace TradeFlow.Api.Endpoints;
 
@@ -40,7 +43,48 @@ public static class AiEndpoints
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
+        group.MapPost("/knowledge/reindex", ReindexKnowledgeAsync)
+            .RequireAuthorization(TradeFlowPolicies.AdminPolicy)
+            .WithName("ReindexKnowledgeBase")
+            .WithSummary("Chunks, embeds, and indexes active Catalog specifications and Customer contracts into PostgreSQL pgvector.")
+            .Produces<KnowledgeReindexResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+
+        group.MapPost("/knowledge/ask", AskKnowledgeAsync)
+            .RequireAuthorization(TradeFlowPolicies.OrderReadPolicy)
+            .WithName("AskKnowledgeQuestion")
+            .WithSummary("Executes multi-tenant Hybrid RAG (pgvector HNSW + PostgreSQL Full-Text RRF) with mandatory customer_id pre-filtering and inline citations.")
+            .Produces<KnowledgeAnswerResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+
         return app;
+    }
+
+    private static async Task<IResult> ReindexKnowledgeAsync(
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new ReindexKnowledgeBaseCommand(), cancellationToken);
+        return result.ToHttpResult();
+    }
+
+    private static async Task<IResult> AskKnowledgeAsync(
+        AskKnowledgeRequest request,
+        ISender sender,
+        CancellationToken cancellationToken)
+    {
+        var query = new AskKnowledgeQuestionQuery(
+            request.Question,
+            request.TopK ?? 5,
+            request.FilterCustomerId);
+
+        var result = await sender.Send(query, cancellationToken);
+        return result.ToHttpResult();
     }
 
     private static async Task<IResult> ParseOrderDraftAsync(
@@ -99,5 +143,10 @@ public static class AiEndpoints
 public sealed record ParseOrderDraftRequest(string Prompt);
 
 public sealed record StreamTradeBriefingRequest(string Question);
+
+public sealed record AskKnowledgeRequest(
+    string Question,
+    int? TopK = 5,
+    Guid? FilterCustomerId = null);
 
 public sealed record SseTokenDelta(string Type, string Text, string? Code = null);

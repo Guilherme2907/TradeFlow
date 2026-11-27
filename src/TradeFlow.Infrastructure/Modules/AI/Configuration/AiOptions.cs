@@ -22,6 +22,8 @@ public sealed class GeminiProviderOptions
 
     public string Model { get; set; } = "gemini-3.8-flash";
 
+    public string EmbeddingModel { get; set; } = "gemini-embedding-001";
+
     /// <summary>
     /// Google AI Studio API key. Can also be supplied via the <c>GEMINI_API_KEY</c> environment variable.
     /// </summary>
@@ -33,6 +35,8 @@ public sealed class OllamaProviderOptions
     public string BaseUrl { get; set; } = "http://localhost:11434";
 
     public string Model { get; set; } = "llama3.2";
+
+    public string EmbeddingModel { get; set; } = "nomic-embed-text";
 }
 
 public sealed class AiResilienceOptions

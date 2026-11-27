@@ -11,7 +11,8 @@ public sealed record CatalogProductSnapshot(
     string Currency,
     string UnitOfMeasure,
     int MinimumOrderQuantity,
-    bool IsActive);
+    bool IsActive,
+    string Description = "");
 
 /// <summary>
 /// Explicit in-process public contract exposed by the Catalog bounded context (ADR-0007).
